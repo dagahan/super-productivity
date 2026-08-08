@@ -60,6 +60,7 @@ describe('operation-sync utility', () => {
         SyncProviderId.OneDrive,
         SyncProviderId.LocalFile,
         SyncProviderId.Nextcloud,
+        SyncProviderId.Bluetooth,
       ]);
       const KNOWN_NON_FILE_BASED: ReadonlySet<SyncProviderId> = new Set([
         SyncProviderId.SuperSync,

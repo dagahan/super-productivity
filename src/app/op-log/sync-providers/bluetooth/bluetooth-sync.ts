@@ -9,7 +9,10 @@ import { OP_LOG_SYNC_LOGGER } from '../../core/sync-logger.adapter';
 import { SyncCredentialStore } from '../credential-store.service';
 import { SyncProviderId } from '../provider.const';
 import { ReachableMemberConnector } from './bluetooth-peer-connector';
-import type { BluetoothPlatformBridge } from './bluetooth-platform.port';
+import type {
+  BluetoothPairedDevice,
+  BluetoothPlatformBridge,
+} from './bluetooth-platform.port';
 
 type BluetoothCredentialStore = ConstructorParameters<
   typeof BluetoothSyncProvider
@@ -73,5 +76,28 @@ export const createBluetoothSyncProvider = (
       });
     });
 
-  return new BluetoothSyncProvider({ logger, connector, credentialStore });
+  const provider = new BluetoothSyncProvider({ logger, connector, credentialStore });
+  return Object.assign(provider, {
+    listPairedDevices: () => bridge.listPairedDevices(),
+    loadRoom: async (): Promise<BluetoothRoomView> => ({
+      localDeviceId: await room.loadLocalDeviceId(),
+      localDeviceName:
+        (await credentialStore.load())?.localDeviceName ??
+        (await bridge.getLocalDeviceName()),
+      members: await room.loadMembers(),
+    }),
+    saveRoomMembers: (members: BluetoothRoomMember[]) => room.saveMembers(members),
+  });
 };
+
+export interface BluetoothRoomView {
+  localDeviceId: string;
+  localDeviceName: string;
+  members: BluetoothRoomMember[];
+}
+
+export interface BluetoothRoomEditor {
+  listPairedDevices(): Promise<BluetoothPairedDevice[]>;
+  loadRoom(): Promise<BluetoothRoomView>;
+  saveRoomMembers(members: BluetoothRoomMember[]): Promise<void>;
+}

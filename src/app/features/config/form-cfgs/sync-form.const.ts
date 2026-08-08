@@ -22,6 +22,7 @@ import { IS_NATIVE_PLATFORM } from '../../../util/is-native-platform';
 import { SUPER_SYNC_DEFAULT_BASE_URL } from '@sp/sync-providers/super-sync';
 import {
   closeAllDialogs,
+  openBluetoothRoomDialog,
   openDisableEncryptionDialogForFileBased,
   openEnableEncryptionDialog,
   openEnableEncryptionDialogForFileBased,
@@ -237,6 +238,14 @@ export const SYNC_FORM: ConfigFormSection<SyncConfig> = {
             tag: 'div',
             text: T.F.SYNC.FORM.BLUETOOTH.INFO_TEXT,
             class: 'sync-warning',
+          },
+        },
+        {
+          type: 'btn',
+          templateOptions: {
+            text: T.F.SYNC.FORM.BLUETOOTH.L_ROOM_DEVICES,
+            btnStyle: 'stroked',
+            onClick: () => openBluetoothRoomDialog(),
           },
         },
       ],

@@ -51,6 +51,12 @@ export class EncryptionPasswordDialogOpenerService {
     this._matDialog.closeAll();
   }
 
+  async openBluetoothRoomDialog(): Promise<void> {
+    const { DialogBluetoothRoomComponent } =
+      await import('./dialog-bluetooth-room/dialog-bluetooth-room.component');
+    this._matDialog.open(DialogBluetoothRoomComponent, { restoreFocus: true });
+  }
+
   openChangePasswordDialog(
     mode: 'full' | 'disable-only' = 'full',
     providerType: 'supersync' | 'file-based' = 'supersync',
@@ -100,3 +106,6 @@ export const openDisableEncryptionDialogForFileBased = (): Promise<
 export const closeAllDialogs = (): void => {
   callOpener((o) => o.closeAllDialogs());
 };
+
+export const openBluetoothRoomDialog = (): Promise<void> =>
+  callOpener((opener) => opener.openBluetoothRoomDialog());

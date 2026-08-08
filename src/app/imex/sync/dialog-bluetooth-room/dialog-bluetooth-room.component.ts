@@ -1,0 +1,112 @@
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  MatDialogActions,
+  MatDialogContent,
+  MatDialogRef,
+  MatDialogTitle,
+} from '@angular/material/dialog';
+import { MatButton } from '@angular/material/button';
+import { MatCheckbox } from '@angular/material/checkbox';
+import { MatIcon } from '@angular/material/icon';
+import { MatIconButton } from '@angular/material/button';
+import { MatProgressSpinner } from '@angular/material/progress-spinner';
+import { TranslatePipe } from '@ngx-translate/core';
+import type { BluetoothRoomMember } from '@sp/sync-providers/bluetooth';
+import { T } from '../../../t.const';
+import { loadSyncProviders } from '../../../op-log/sync-providers/sync-providers.factory';
+import { SyncProviderId } from '../../../op-log/sync-providers/provider.const';
+import type { BluetoothRoomEditor } from '../../../op-log/sync-providers/bluetooth/bluetooth-sync';
+import type { BluetoothPairedDevice } from '../../../op-log/sync-providers/bluetooth/bluetooth-platform.port';
+
+@Component({
+  selector: 'dialog-bluetooth-room',
+  templateUrl: './dialog-bluetooth-room.component.html',
+  styleUrl: './dialog-bluetooth-room.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    MatDialogTitle,
+    MatDialogContent,
+    MatDialogActions,
+    MatButton,
+    MatIconButton,
+    MatCheckbox,
+    MatIcon,
+    MatProgressSpinner,
+    TranslatePipe,
+  ],
+})
+export class DialogBluetoothRoomComponent {
+  private readonly _matDialogRef =
+    inject<MatDialogRef<DialogBluetoothRoomComponent>>(MatDialogRef);
+
+  readonly T = T;
+  readonly isLoading = signal(true);
+  readonly members = signal<BluetoothRoomMember[]>([]);
+  readonly addableDevices = signal<BluetoothPairedDevice[]>([]);
+
+  private editor: BluetoothRoomEditor | null = null;
+
+  constructor() {
+    void this._load();
+  }
+
+  addDevice(device: BluetoothPairedDevice): void {
+    const member: BluetoothRoomMember = {
+      deviceId: device.platformAddress,
+      deviceName: device.deviceName,
+      platformAddress: device.platformAddress,
+      isTrustedToInvite: false,
+      invitedByDeviceId: null,
+    };
+    this.members.update((current) => [...current, member]);
+    this._refreshAddableDevices();
+  }
+
+  removeMember(deviceId: string): void {
+    this.members.update((current) =>
+      current.filter((member) => member.deviceId !== deviceId),
+    );
+    this._refreshAddableDevices();
+  }
+
+  setTrustedToInvite(deviceId: string, isTrustedToInvite: boolean): void {
+    this.members.update((current) =>
+      current.map((member) =>
+        member.deviceId === deviceId ? { ...member, isTrustedToInvite } : member,
+      ),
+    );
+  }
+
+  async save(): Promise<void> {
+    await this.editor?.saveRoomMembers(this.members());
+    this._matDialogRef.close(true);
+  }
+
+  close(): void {
+    this._matDialogRef.close(false);
+  }
+
+  private async _load(): Promise<void> {
+    const providers = await loadSyncProviders();
+    const provider = providers.find((entry) => entry.id === SyncProviderId.Bluetooth);
+    this.editor = provider as unknown as BluetoothRoomEditor | null;
+    if (!this.editor) {
+      this.isLoading.set(false);
+      return;
+    }
+    const room = await this.editor.loadRoom();
+    this.members.set(room.members);
+    await this._refreshAddableDevices();
+    this.isLoading.set(false);
+  }
+
+  private async _refreshAddableDevices(): Promise<void> {
+    const paired = (await this.editor?.listPairedDevices()) ?? [];
+    const memberAddresses = new Set(
+      this.members().map((member) => member.platformAddress),
+    );
+    this.addableDevices.set(
+      paired.filter((device) => !memberAddresses.has(device.platformAddress)),
+    );
+  }
+}

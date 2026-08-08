@@ -7,13 +7,14 @@ import {
 } from '../sync-providers/provider.interface';
 import { SyncProviderId } from '../sync-providers/provider.const';
 
-/** Provider IDs that use file-based operation sync (WebDAV, Dropbox, OneDrive, LocalFile, Nextcloud) */
+/** Provider IDs that use file-based operation sync (WebDAV, Dropbox, OneDrive, LocalFile, Nextcloud, Bluetooth) */
 const FILE_BASED_PROVIDER_IDS: Set<SyncProviderId> = new Set([
   SyncProviderId.WebDAV,
   SyncProviderId.Dropbox,
   SyncProviderId.OneDrive,
   SyncProviderId.LocalFile,
   SyncProviderId.Nextcloud,
+  SyncProviderId.Bluetooth,
 ]);
 
 const OPERATION_SYNC_PROVIDER_MODES: Set<OperationSyncProviderMode> = new Set([

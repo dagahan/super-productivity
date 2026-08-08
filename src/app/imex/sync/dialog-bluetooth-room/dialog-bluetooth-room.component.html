@@ -1,0 +1,64 @@
+<h1 mat-dialog-title>{{ T.F.SYNC.FORM.BLUETOOTH.L_ROOM_DEVICES | translate }}</h1>
+
+<mat-dialog-content>
+  @if (isLoading()) {
+    <mat-spinner diameter="32"></mat-spinner>
+  } @else {
+    <p>{{ T.F.SYNC.FORM.BLUETOOTH.INFO_TEXT | translate }}</p>
+
+    @if (members().length) {
+      <ul class="member-list">
+        @for (member of members(); track member.deviceId) {
+          <li>
+            <div class="member-name">{{ member.deviceName }}</div>
+            <mat-checkbox
+              [checked]="member.isTrustedToInvite"
+              (change)="setTrustedToInvite(member.deviceId, $event.checked)"
+            >
+              {{ T.F.SYNC.FORM.BLUETOOTH.L_TRUSTED_TO_INVITE | translate }}
+            </mat-checkbox>
+            <button
+              mat-icon-button
+              (click)="removeMember(member.deviceId)"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p>{{ T.F.SYNC.FORM.BLUETOOTH.L_NO_DEVICES | translate }}</p>
+    }
+
+    <h2>{{ T.F.SYNC.FORM.BLUETOOTH.L_ADD_DEVICE | translate }}</h2>
+    <ul class="paired-list">
+      @for (device of addableDevices(); track device.platformAddress) {
+        <li>
+          <button
+            mat-button
+            (click)="addDevice(device)"
+          >
+            <mat-icon>add</mat-icon>
+            {{ device.deviceName }}
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button
+    mat-button
+    (click)="close()"
+  >
+    {{ T.G.CANCEL | translate }}
+  </button>
+  <button
+    mat-flat-button
+    color="primary"
+    (click)="save()"
+  >
+    {{ T.G.SAVE | translate }}
+  </button>
+</mat-dialog-actions>
