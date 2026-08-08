@@ -4,6 +4,16 @@
   "description": "Framework-agnostic sync provider contracts for Super Productivity sync",
   "sideEffects": false,
   "exports": {
+    "./bluetooth": {
+      "import": {
+        "types": "./dist/bluetooth.d.mts",
+        "default": "./dist/bluetooth.mjs"
+      },
+      "require": {
+        "types": "./dist/bluetooth.d.ts",
+        "default": "./dist/bluetooth.js"
+      }
+    },
     "./dropbox": {
       "import": {
         "types": "./dist/dropbox.d.mts",

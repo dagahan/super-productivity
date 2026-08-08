@@ -2,6 +2,7 @@ import { defineConfig } from 'tsup';
 
 export default defineConfig({
   entry: [
+    'src/bluetooth.ts',
     'src/dropbox.ts',
     'src/webdav.ts',
     'src/local-file.ts',
