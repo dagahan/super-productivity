@@ -78,5 +78,27 @@ const _createProviders = async (): Promise<SyncProviderBase<SyncProviderId>[]> =
     providers.push(createLocalFileSyncAndroid() as SyncProviderBase<SyncProviderId>);
   }
 
+  if (IS_ELECTRON) {
+    const { createElectronBluetoothBridge } =
+      await import('./bluetooth/electron-bluetooth-bridge');
+    const { createBluetoothSyncProvider } = await import('./bluetooth/bluetooth-sync');
+    providers.push(
+      createBluetoothSyncProvider(
+        createElectronBluetoothBridge(),
+      ) as SyncProviderBase<SyncProviderId>,
+    );
+  }
+
+  if (IS_ANDROID_WEB_VIEW) {
+    const { createCapacitorBluetoothBridge } =
+      await import('./bluetooth/capacitor-bluetooth-bridge');
+    const { createBluetoothSyncProvider } = await import('./bluetooth/bluetooth-sync');
+    providers.push(
+      createBluetoothSyncProvider(
+        createCapacitorBluetoothBridge(),
+      ) as SyncProviderBase<SyncProviderId>,
+    );
+  }
+
   return providers;
 };

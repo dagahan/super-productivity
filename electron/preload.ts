@@ -59,6 +59,32 @@ const ea: ElectronAPI = {
     _invoke('FILE_SYNC_LIST_FILES', args) as Promise<string[] | Error>,
   checkDirExists: (args) => _invoke('CHECK_DIR_EXISTS', args) as Promise<true | Error>,
 
+  bluetoothSyncIsAvailable: () =>
+    _invoke('BLUETOOTH_SYNC_IS_AVAILABLE') as Promise<boolean>,
+  bluetoothSyncGetLocalDeviceName: () =>
+    _invoke('BLUETOOTH_SYNC_GET_LOCAL_DEVICE_NAME') as Promise<string>,
+  bluetoothSyncListPairedDevices: () =>
+    _invoke('BLUETOOTH_SYNC_LIST_PAIRED_DEVICES') as Promise<
+      { platformAddress: string; deviceName: string; isCurrentlyConnected: boolean }[]
+    >,
+  bluetoothSyncConnect: (args) =>
+    _invoke('BLUETOOTH_SYNC_CONNECT', args) as Promise<{ linkId: string }>,
+  bluetoothSyncWrite: (args) => _invoke('BLUETOOTH_SYNC_WRITE', args) as Promise<void>,
+  bluetoothSyncCloseLink: (args) =>
+    _invoke('BLUETOOTH_SYNC_CLOSE_LINK', args) as Promise<void>,
+  bluetoothSyncStartListening: () =>
+    _invoke('BLUETOOTH_SYNC_START_LISTENING') as Promise<{ psm: number }>,
+  bluetoothSyncStopListening: () =>
+    _invoke('BLUETOOTH_SYNC_STOP_LISTENING') as Promise<void>,
+  bluetoothSyncReadSharedFile: (args) =>
+    _invoke('BLUETOOTH_SYNC_READ_SHARED_FILE', args) as Promise<string>,
+  bluetoothSyncWriteSharedFile: (args) =>
+    _invoke('BLUETOOTH_SYNC_WRITE_SHARED_FILE', args) as Promise<void>,
+  bluetoothSyncDeleteSharedFile: (args) =>
+    _invoke('BLUETOOTH_SYNC_DELETE_SHARED_FILE', args) as Promise<void>,
+  bluetoothSyncListSharedFiles: (args) =>
+    _invoke('BLUETOOTH_SYNC_LIST_SHARED_FILES', args) as Promise<string[]>,
+
   pickDirectory: () => _invoke('PICK_DIRECTORY') as Promise<string | Error | undefined>,
   commitPickedDirectory: () =>
     _invoke('COMMIT_PICKED_DIRECTORY') as Promise<

@@ -70,6 +70,24 @@ export interface ElectronAPI {
    *   folder lives inside the app's private dir). No candidate is stored in
    *   this case; the renderer must treat it as a failure, not a picked path.
    */
+  bluetoothSyncIsAvailable(): Promise<boolean>;
+  bluetoothSyncGetLocalDeviceName(): Promise<string>;
+  bluetoothSyncListPairedDevices(): Promise<
+    { platformAddress: string; deviceName: string; isCurrentlyConnected: boolean }[]
+  >;
+  bluetoothSyncConnect(args: { platformAddress: string }): Promise<{ linkId: string }>;
+  bluetoothSyncWrite(args: { linkId: string; dataBase64: string }): Promise<void>;
+  bluetoothSyncCloseLink(args: { linkId: string }): Promise<void>;
+  bluetoothSyncStartListening(): Promise<{ psm: number }>;
+  bluetoothSyncStopListening(): Promise<void>;
+  bluetoothSyncReadSharedFile(args: { filePath: string }): Promise<string>;
+  bluetoothSyncWriteSharedFile(args: {
+    filePath: string;
+    dataStr: string;
+  }): Promise<void>;
+  bluetoothSyncDeleteSharedFile(args: { filePath: string }): Promise<void>;
+  bluetoothSyncListSharedFiles(args: { dirPath: string }): Promise<string[]>;
+
   pickDirectory(): Promise<string | Error | undefined>;
 
   /**

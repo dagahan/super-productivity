@@ -214,8 +214,32 @@ export const SYNC_FORM: ConfigFormSection<SyncConfig> = {
                 },
               ]
             : []),
+          ...(IS_ELECTRON || IS_ANDROID_WEB_VIEW
+            ? [
+                {
+                  label: 'Bluetooth (experimental)',
+                  value: SyncProviderId.Bluetooth,
+                },
+              ]
+            : []),
         ],
       },
+    },
+    {
+      hideExpression: (m, v, field) =>
+        isNotSyncProvider(field, 1, SyncProviderId.Bluetooth),
+      resetOnHide: false,
+      key: 'bluetoothSync',
+      fieldGroup: [
+        {
+          type: 'tpl',
+          templateOptions: {
+            tag: 'div',
+            text: T.F.SYNC.FORM.BLUETOOTH.INFO_TEXT,
+            class: 'sync-warning',
+          },
+        },
+      ],
     },
     {
       hideExpression: (m, v, field) =>

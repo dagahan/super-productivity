@@ -203,6 +203,12 @@ npm run buildFrontend:prod:es6
 step "electron main process"
 npm run electron:build
 
+step "bluetooth helper"
+# CoreBluetooth is not reachable from Node, so the L2CAP transport lives in a
+# small Swift helper the main process drives over stdio. It is signed together
+# with the bundle, so it inherits the app's Bluetooth TCC grant.
+swiftc -O electron/assets/sp-bluetooth-helper.swift -o electron/assets/sp-bluetooth-helper
+
 step "packaging"
 # electron-builder.yaml asks for notarization, a hardened runtime and a
 # provisioning profile; all three need an Apple Developer account. Overriding

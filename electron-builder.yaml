@@ -34,6 +34,10 @@ files:
   - '!**/uuidv7/**'
 #afterSign: ./tools/notarizeMacApp.js
 
+extraResources:
+  - from: 'electron/assets/sp-bluetooth-helper'
+    to: 'sp-bluetooth-helper'
+
 directories:
   output: './.tmp/app-builds'
 

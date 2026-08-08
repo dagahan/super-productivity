@@ -69,8 +69,8 @@ const createPairedPeers = ({
   const fileResponder = new BluetoothFileResponder({
     fileAdapter: remoteAdapter,
     logger,
-    localDeviceId: 'remote-device',
     room: {
+      loadLocalDeviceId: async () => 'remote-device',
       loadMembers: async () => remoteRoomMembers,
       saveMembers: async (members) => {
         remoteRoomMembers = members;

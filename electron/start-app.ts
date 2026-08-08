@@ -8,6 +8,7 @@ import electronDl from 'electron-dl';
 import { IPC } from './shared-with-frontend/ipc-events.const';
 import { initBackupAdapter } from './backup';
 import { initLocalFileSyncAdapter } from './local-file-sync';
+import { initBluetoothSync } from './bluetooth-sync';
 import { initFullScreenBlocker } from './full-screen-blocker';
 import { CONFIG } from './CONFIG';
 import { lazySetInterval } from './shared-with-frontend/lazy-set-interval';
@@ -281,6 +282,7 @@ export const startApp = (): void => {
   appIN.on('ready', () => createMainWin());
   appIN.on('ready', () => initBackupAdapter());
   appIN.on('ready', () => initLocalFileSyncAdapter());
+  appIN.on('ready', () => initBluetoothSync(() => mainWin ?? null));
   appIN.on('ready', () => initFullScreenBlocker(IS_DEV));
 
   if (!isDisableTray) {
