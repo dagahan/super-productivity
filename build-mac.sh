@@ -207,7 +207,10 @@ step "bluetooth helper"
 # CoreBluetooth is not reachable from Node, so the L2CAP transport lives in a
 # small Swift helper the main process drives over stdio. It is signed together
 # with the bundle, so it inherits the app's Bluetooth TCC grant.
-swiftc -O electron/assets/sp-bluetooth-helper.swift -o electron/assets/sp-bluetooth-helper
+swiftc -O electron/assets/sp-bluetooth-helper.swift \
+  -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist \
+  -Xlinker electron/assets/sp-bluetooth-helper.plist \
+  -o electron/assets/sp-bluetooth-helper
 
 step "packaging"
 # electron-builder.yaml asks for notarization, a hardened runtime and a

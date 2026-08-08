@@ -200,6 +200,9 @@ mac:
   notarize: true
   extendInfo:
     ITSAppUsesNonExemptEncryption: false
+    NSBluetoothAlwaysUsageDescription: >-
+      Super Productivity syncs your tasks directly with your other devices over
+      Bluetooth.
   publish:
     - github
   target:

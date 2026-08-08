@@ -6,6 +6,7 @@ let syncServiceUUID = CBUUID(string: "7A9C1E40-5B3D-4F21-9C86-2E1D0A7B4F33")
 let psmCharacteristicUUID = CBUUID(string: "7A9C1E44-5B3D-4F21-9C86-2E1D0A7B4F33")
 let advertisedLocalName = "SuperProductivitySync"
 let streamChunkBytes = 65536
+let powerOnDeadlineSeconds = 5.0
 
 func writeLine(_ payload: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
@@ -115,6 +116,8 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
     private var nextLinkSequence = 0
 
     private var startListeningCommandId: Int?
+    private var commandsAwaitingPowerOn: [[String: Any]] = []
+    private var hasScheduledPowerOnDeadline = false
     private var pendingConnectByPeripheralId: [UUID: Int] = [:]
     private var connectingPeripherals: [UUID: CBPeripheral] = [:]
 
@@ -125,6 +128,11 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
 
     func handleCommand(_ command: [String: Any]) {
         guard let id = command["id"] as? Int, let cmd = command["cmd"] as? String else {
+            return
+        }
+        if peripheralManager.state == .unknown && cmd != "localDeviceName" {
+            commandsAwaitingPowerOn.append(command)
+            schedulePowerOnDeadline()
             return
         }
         switch cmd {
@@ -144,6 +152,29 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
             closeLink(commandId: id, command: command)
         default:
             respondError(id: id, message: "Unknown command \(cmd)")
+        }
+    }
+
+    /// CoreBluetooth reports its state asynchronously, and a process without a
+    /// usable Bluetooth grant never leaves .unknown at all. Commands wait for the
+    /// first state, then fail rather than hanging the caller forever.
+    private func schedulePowerOnDeadline() {
+        guard !hasScheduledPowerOnDeadline else { return }
+        hasScheduledPowerOnDeadline = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + powerOnDeadlineSeconds) { [weak self] in
+            guard let self, self.peripheralManager.state == .unknown else { return }
+            let queued = self.commandsAwaitingPowerOn
+            self.commandsAwaitingPowerOn = []
+            for command in queued {
+                guard let id = command["id"] as? Int else { continue }
+                if command["cmd"] as? String == "isAvailable" {
+                    respond(id: id, result: ["isAvailable": false])
+                } else {
+                    respondError(
+                        id: id,
+                        message: "Bluetooth did not become available for this app")
+                }
+            }
         }
     }
 
@@ -237,7 +268,13 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
         return linkId
     }
 
-    func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {}
+    func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+        guard peripheral.state != .unknown else { return }
+        hasScheduledPowerOnDeadline = false
+        let queued = commandsAwaitingPowerOn
+        commandsAwaitingPowerOn = []
+        for command in queued { handleCommand(command) }
+    }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {}
 
@@ -391,7 +428,7 @@ DispatchQueue.global(qos: .userInitiated).async {
         }
         DispatchQueue.main.async { helper.handleCommand(command) }
     }
-    exit(0)
+    DispatchQueue.main.async { exit(0) }
 }
 
 RunLoop.main.run()
