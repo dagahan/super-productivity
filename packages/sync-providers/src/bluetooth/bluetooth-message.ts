@@ -1,3 +1,5 @@
+import type { BluetoothRoomMember } from './bluetooth.model';
+
 export const BLUETOOTH_PROTOCOL_VERSION = 1;
 
 export const BLUETOOTH_FRAME_TYPE = {
@@ -6,7 +8,13 @@ export const BLUETOOTH_FRAME_TYPE = {
 } as const;
 
 export type BluetoothRequestMessage =
-  | { id: string; method: 'hello'; protocolVersion: number; deviceId: string }
+  | {
+      id: string;
+      method: 'hello';
+      protocolVersion: number;
+      deviceId: string;
+      members: BluetoothRoomMember[];
+    }
   | { id: string; method: 'getFileRev'; targetPath: string }
   | { id: string; method: 'downloadFile'; targetPath: string }
   | {
@@ -42,6 +50,7 @@ export type BluetoothResponseMessage =
 export interface HelloResult {
   protocolVersion: number;
   deviceId: string;
+  members: BluetoothRoomMember[];
 }
 
 export interface FileRevResult {

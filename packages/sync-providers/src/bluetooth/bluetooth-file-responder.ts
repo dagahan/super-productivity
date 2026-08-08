@@ -7,12 +7,19 @@ import {
   type BluetoothRequestMessage,
   type BluetoothResponseMessage,
 } from './bluetooth-message';
+import { isRoomMember, mergeRoomMembers } from './bluetooth-room';
+import type { BluetoothRoomMember } from './bluetooth.model';
+
+export interface BluetoothRoomStore {
+  loadMembers(): Promise<BluetoothRoomMember[]>;
+  saveMembers(members: BluetoothRoomMember[]): Promise<void>;
+}
 
 export interface BluetoothFileResponderDeps {
   fileAdapter: FileAdapter;
   logger: SyncLogger;
   localDeviceId: string;
-  isPeerAuthorized: (peerDeviceId: string) => Promise<boolean>;
+  room: BluetoothRoomStore;
 }
 
 export class BluetoothFileResponder {
@@ -53,9 +60,21 @@ export class BluetoothFileResponder {
         `Peer speaks protocol ${request.protocolVersion}, this device speaks ${BLUETOOTH_PROTOCOL_VERSION}`,
       );
     }
-    if (!(await this.deps.isPeerAuthorized(request.deviceId))) {
+    const localMembers = await this.deps.room.loadMembers();
+    if (!isRoomMember(localMembers, request.deviceId)) {
       return failure(request.id, 'notAuthorized', 'Peer is not a member of this room');
     }
+
+    const merged = mergeRoomMembers({
+      localDeviceId: this.deps.localDeviceId,
+      localMembers,
+      peerDeviceId: request.deviceId,
+      peerMembers: request.members,
+    });
+    if (merged.addedDeviceIds.length) {
+      await this.deps.room.saveMembers(merged.members);
+    }
+
     this.authorizedPeerDeviceId = request.deviceId;
     return {
       id: request.id,
@@ -63,6 +82,7 @@ export class BluetoothFileResponder {
       result: {
         protocolVersion: BLUETOOTH_PROTOCOL_VERSION,
         deviceId: this.deps.localDeviceId,
+        members: merged.members,
       },
     };
   }

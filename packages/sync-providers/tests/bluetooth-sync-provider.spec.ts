@@ -15,8 +15,10 @@ import {
 } from '../src/bluetooth/bluetooth-sync-provider';
 import {
   PROVIDER_ID_BLUETOOTH,
+  type BluetoothRoomMember,
   type BluetoothSyncPrivateCfg,
 } from '../src/bluetooth/bluetooth.model';
+import type { SyncCredentialStorePort } from '../src/credential-store-port';
 import { createStatefulCredentialStore } from './helpers/credential-store';
 import {
   createInMemoryFileAdapter,
@@ -28,28 +30,52 @@ const SYNC_PATH = 'sp-sync.json';
 
 interface PairedPeers {
   provider: BluetoothSyncProvider;
+  credentialStore: SyncCredentialStorePort<
+    typeof PROVIDER_ID_BLUETOOTH,
+    BluetoothSyncPrivateCfg
+  >;
   remoteFiles: Map<string, string>;
+  readRemoteMembers: () => BluetoothRoomMember[];
   closeResponderLink: () => Promise<void>;
 }
 
+const remoteMember = (
+  deviceId: string,
+  isTrustedToInvite = false,
+): BluetoothRoomMember => ({
+  deviceId,
+  deviceName: `${deviceId} name`,
+  platformAddress: '44:CB:AD:5D:06:4D',
+  isTrustedToInvite,
+  invitedByDeviceId: null,
+});
+
 const createPairedPeers = ({
   remoteSeed = {},
-  authorizedDeviceIds = ['local-device'],
+  remoteMembers = [remoteMember('local-device')],
+  localMembers = [remoteMember('remote-device')],
   chunkBytes = 64,
 }: {
   remoteSeed?: Record<string, string>;
-  authorizedDeviceIds?: string[];
+  remoteMembers?: BluetoothRoomMember[];
+  localMembers?: BluetoothRoomMember[];
   chunkBytes?: number;
 } = {}): PairedPeers => {
   const logger = createSilentSyncLogger();
   const { initiator, responder } = createLinkPair(chunkBytes);
   const remoteAdapter = createInMemoryFileAdapter(remoteSeed);
+  let remoteRoomMembers = remoteMembers;
 
   const fileResponder = new BluetoothFileResponder({
     fileAdapter: remoteAdapter,
     logger,
     localDeviceId: 'remote-device',
-    isPeerAuthorized: async (peerDeviceId) => authorizedDeviceIds.includes(peerDeviceId),
+    room: {
+      loadMembers: async () => remoteRoomMembers,
+      saveMembers: async (members) => {
+        remoteRoomMembers = members;
+      },
+    },
   });
 
   new BluetoothPeerSession({
@@ -72,31 +98,23 @@ const createPairedPeers = ({
     connectToAnyReachableMember: async () => initiatorSession,
   };
 
-  const provider = new BluetoothSyncProvider({
-    logger,
-    connector,
-    credentialStore: createStatefulCredentialStore<
-      typeof PROVIDER_ID_BLUETOOTH,
-      BluetoothSyncPrivateCfg
-    >({
-      roomId: 'room-1',
-      localDeviceId: 'local-device',
-      localDeviceName: 'Laptop',
-      members: [
-        {
-          deviceId: 'remote-device',
-          deviceName: 'Tablet',
-          platformAddress: '44:CB:AD:5D:06:4D',
-          isTrustedToInvite: true,
-          invitedByDeviceId: null,
-        },
-      ],
-    }),
+  const credentialStore = createStatefulCredentialStore<
+    typeof PROVIDER_ID_BLUETOOTH,
+    BluetoothSyncPrivateCfg
+  >({
+    roomId: 'room-1',
+    localDeviceId: 'local-device',
+    localDeviceName: 'Laptop',
+    members: localMembers,
   });
+
+  const provider = new BluetoothSyncProvider({ logger, connector, credentialStore });
 
   return {
     provider,
+    credentialStore,
     remoteFiles: remoteAdapter.files,
+    readRemoteMembers: () => remoteRoomMembers,
     closeResponderLink: () => responder.close(),
   };
 };
@@ -221,13 +239,56 @@ describe('BluetoothSyncProvider over a loopback link', () => {
   it('refuses every file request from a device outside the room', async () => {
     const { provider, remoteFiles } = createPairedPeers({
       remoteSeed: { [SYNC_PATH]: 'private' },
-      authorizedDeviceIds: [],
+      remoteMembers: [],
     });
 
     await expect(provider.downloadFile(SYNC_PATH)).rejects.toBeInstanceOf(
       BluetoothPeerError,
     );
     expect(remoteFiles.get(SYNC_PATH)).toBe('private');
+  });
+
+  it('learns a third device from a trusted peer during the handshake', async () => {
+    const { provider, credentialStore } = createPairedPeers({
+      localMembers: [remoteMember('remote-device', true)],
+      remoteMembers: [remoteMember('local-device'), remoteMember('phone')],
+    });
+
+    await provider.uploadFile(SYNC_PATH, '{"ops":[]}', null);
+
+    const cfg = await credentialStore.load();
+    expect(cfg?.members?.map((entry) => entry.deviceId)).toEqual([
+      'remote-device',
+      'phone',
+    ]);
+    expect(cfg?.members?.[1].isTrustedToInvite).toBe(false);
+    expect(cfg?.members?.[1].invitedByDeviceId).toBe('remote-device');
+  });
+
+  it('does not learn members from a peer this device has not trusted to invite', async () => {
+    const { provider, credentialStore } = createPairedPeers({
+      localMembers: [remoteMember('remote-device', false)],
+      remoteMembers: [remoteMember('local-device'), remoteMember('phone')],
+    });
+
+    await provider.uploadFile(SYNC_PATH, '{"ops":[]}', null);
+
+    const cfg = await credentialStore.load();
+    expect(cfg?.members?.map((entry) => entry.deviceId)).toEqual(['remote-device']);
+  });
+
+  it('teaches a trusting peer about devices it does not know yet', async () => {
+    const { provider, readRemoteMembers } = createPairedPeers({
+      localMembers: [remoteMember('remote-device'), remoteMember('phone')],
+      remoteMembers: [remoteMember('local-device', true)],
+    });
+
+    await provider.uploadFile(SYNC_PATH, '{"ops":[]}', null);
+
+    expect(readRemoteMembers().map((entry) => entry.deviceId)).toEqual([
+      'local-device',
+      'phone',
+    ]);
   });
 
   it('fails an in-flight request when the link drops', async () => {

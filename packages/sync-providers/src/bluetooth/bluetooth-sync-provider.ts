@@ -18,6 +18,7 @@ import {
   type ListFilesResult,
 } from './bluetooth-message';
 import { BluetoothPeerError, type BluetoothPeerSession } from './bluetooth-peer-session';
+import { mergeRoomMembers } from './bluetooth-room';
 import { PROVIDER_ID_BLUETOOTH, type BluetoothSyncPrivateCfg } from './bluetooth.model';
 
 export interface BluetoothPeerConnector {
@@ -153,15 +154,29 @@ export class BluetoothSyncProvider implements FileSyncProvider<
     if (!cfg?.localDeviceId) {
       throw new InvalidDataSPError('Bluetooth sync has no local device id');
     }
+    const localMembers = cfg.members ?? [];
     const session = await this.deps.connector.connectToAnyReachableMember();
     const hello = (await session.send({
       id: session.createRequestId(),
       method: 'hello',
       protocolVersion: BLUETOOTH_PROTOCOL_VERSION,
       deviceId: cfg.localDeviceId,
+      members: localMembers,
     })) as HelloResult;
+
+    const merged = mergeRoomMembers({
+      localDeviceId: cfg.localDeviceId,
+      localMembers,
+      peerDeviceId: hello.deviceId,
+      peerMembers: hello.members ?? [],
+    });
+    if (merged.addedDeviceIds.length) {
+      await this.privateCfg.updatePartial({ members: merged.members });
+    }
+
     this.deps.logger.normal('BluetoothSyncProvider connected', {
       peerProtocolVersion: hello.protocolVersion,
+      learnedMemberCount: merged.addedDeviceIds.length,
     });
     this.activeSession = session;
     return session;

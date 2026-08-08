@@ -39,7 +39,15 @@ export {
   FileNotFoundOnPeerError,
   RevToMatchMismatchError,
   type BluetoothFileResponderDeps,
+  type BluetoothRoomStore,
 } from './bluetooth/bluetooth-file-responder';
+export {
+  isRoomMember,
+  isTrustedToInvite,
+  mergeRoomMembers,
+  type RoomMemberMergeInput,
+  type RoomMemberMergeResult,
+} from './bluetooth/bluetooth-room';
 export {
   BluetoothSyncProvider,
   type BluetoothPeerConnector,
