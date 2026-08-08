@@ -68,19 +68,39 @@ with_notready() {
   if [[ -n "$notready" ]]; then printf '%s\nnot ready:\n%s\n' "$1" "$notready"; else printf '%s\n' "$1"; fi
 }
 
+is_wireless_transport() { [[ "$1" == *_adb-tls-connect._tcp ]]; }
+
+# One phone attached over USB *and* adb-over-TLS shows up twice in
+# `adb devices` under two transport serials, which otherwise looks like two
+# devices and forces ANDROID_SERIAL for no reason. Group transports by the
+# hardware serial each one reports, and keep the USB transport: it is faster
+# and does not drop partway through an install.
+unique_device_transports() {
+  local serial hardware rank rows=""
+  while IFS= read -r serial; do
+    [[ -n "$serial" ]] || continue
+    hardware=$(adb -s "$serial" shell getprop ro.serialno 2>/dev/null | tr -d '\r')
+    [[ -n "$hardware" ]] || hardware="$serial"
+    if is_wireless_transport "$serial"; then rank=1; else rank=0; fi
+    rows+="$hardware	$rank	$serial"$'\n'
+  done
+  printf '%s' "$rows" | sort -t'	' -k1,1 -k2,2n | awk -F'	' 'NF && !seen[$1]++ {print $3}'
+}
+
 if [[ -n "${ANDROID_SERIAL:-}" ]]; then
   if ! printf '%s\n' "$ready" | grep -qx "$ANDROID_SERIAL"; then
     die "$(with_notready "ANDROID_SERIAL=$ANDROID_SERIAL is not attached and ready")"
   fi
   serial="$ANDROID_SERIAL"
 else
-  count=$(printf '%s\n' "$ready" | grep -c . || true)
+  distinct=$(printf '%s\n' "$ready" | unique_device_transports)
+  count=$(printf '%s\n' "$distinct" | grep -c . || true)
   if (( count == 0 )); then
     die "$(with_notready "no device ready; attach one over USB, unlock it and accept the debugging prompt")"
   elif (( count > 1 )); then
-    die "$count devices attached; set ANDROID_SERIAL to one of:"$'\n'"$(printf '%s\n' "$ready" | sed 's/^/  /')"
+    die "$count devices attached; set ANDROID_SERIAL to one of:"$'\n'"$(printf '%s\n' "$distinct" | sed 's/^/  /')"
   fi
-  serial="$ready"
+  serial="$distinct"
 fi
 
 api=$(adb -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')
