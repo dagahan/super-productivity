@@ -179,6 +179,10 @@ export interface OneDriveConfig {
   syncFolderPath?: string | null;
 }
 
+export interface BluetoothSyncConfig {
+  roomId?: string | null;
+}
+
 export interface LocalFileSyncConfig {
   // TODO remove and migrate
   syncFilePath?: string | null;
@@ -235,6 +239,8 @@ export type SyncConfig = Readonly<{
   superSync?: SuperSyncConfig;
   /* NOTE: view model for form only*/
   localFileSync?: LocalFileSyncConfig;
+  /* NOTE: view model for form only*/
+  bluetoothSync?: BluetoothSyncConfig;
   /* NOTE: view model for form only*/
   nextcloud?: NextcloudConfig;
   /* NOTE: view model for form only*/

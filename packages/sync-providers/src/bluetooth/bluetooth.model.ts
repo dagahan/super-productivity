@@ -9,6 +9,8 @@ export interface BluetoothRoomMember {
 }
 
 export interface BluetoothSyncPrivateCfg {
+  encryptKey?: string;
+  isEncryptionEnabled?: boolean;
   roomId?: string;
   localDeviceId?: string;
   localDeviceName?: string;

@@ -23,6 +23,7 @@ const PROP_MAP_TO_FORM: Record<SyncProviderId, keyof SyncConfig | null> = {
   [SyncProviderId.SuperSync]: 'superSync',
   [SyncProviderId.Nextcloud]: 'nextcloud',
   [SyncProviderId.OneDrive]: 'oneDrive',
+  [SyncProviderId.Bluetooth]: 'bluetoothSync',
   [SyncProviderId.Dropbox]: null,
 };
 
@@ -96,6 +97,9 @@ const PROVIDER_FIELD_DEFAULTS: Record<
     // syncFolderPath is intentionally omitted: post-#8228 the sync folder
     // path is owned main-side (electron/local-file-sync.ts) so a compromised
     // renderer cannot rewrite it via the credential store.
+    encryptKey: '',
+  },
+  [SyncProviderId.Bluetooth]: {
     encryptKey: '',
   },
   [SyncProviderId.Dropbox]: {
