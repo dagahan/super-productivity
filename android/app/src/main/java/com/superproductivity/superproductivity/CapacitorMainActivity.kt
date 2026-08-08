@@ -17,6 +17,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.anggrayudi.storage.SimpleStorageHelper
 import com.getcapacitor.BridgeActivity
 import com.superproductivity.superproductivity.plugins.NavigationBarPlugin
+import com.superproductivity.superproductivity.plugins.BluetoothSyncPlugin
 import com.superproductivity.superproductivity.plugins.SafBridgePlugin
 import com.superproductivity.superproductivity.service.BackgroundSyncCredentialStore
 import com.superproductivity.superproductivity.service.FocusModeForegroundService
@@ -129,6 +130,7 @@ class CapacitorMainActivity : BridgeActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Register plugins before calling super.onCreate()
         registerPlugin(SafBridgePlugin::class.java)
+        registerPlugin(BluetoothSyncPlugin::class.java)
         registerPlugin(WebDavHttpPlugin::class.java)
         registerPlugin(NavigationBarPlugin::class.java)
 
