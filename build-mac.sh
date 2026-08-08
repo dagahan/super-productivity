@@ -233,6 +233,12 @@ step "signing"
 # --keychain points at the dedicated keychain instead of mutating the user's
 # global keychain search list.
 prepare_codesign_keychain
+# The helper is a plain executable in Resources, so --deep leaves it with the
+# ad-hoc signature the linker emitted. Sign it first, then the bundle, so the
+# app's seal covers a helper that carries the same stable identity -- TCC
+# attributes the Bluetooth grant to that identity.
+codesign --force --keychain "$CODESIGN_KEYCHAIN" \
+  --sign "$codesign_identity" "$BUILT_APP/Contents/Resources/sp-bluetooth-helper"
 codesign --force --deep --keychain "$CODESIGN_KEYCHAIN" \
   --sign "$codesign_identity" "$BUILT_APP"
 identifier=$(codesign -dv "$BUILT_APP" 2>&1 | sed -n 's/^Identifier=//p')
