@@ -19,6 +19,7 @@
       "@super-productivity/plugin-api": ["packages/plugin-api/src/index.ts"],
       "@sp/shared-schema": ["packages/shared-schema/dist/index.d.ts"],
       "@sp/sync-core": ["packages/sync-core/dist/index.d.ts"],
+      "@sp/sync-providers/bluetooth": ["packages/sync-providers/dist/bluetooth.d.ts"],
       "@sp/sync-providers/dropbox": ["packages/sync-providers/dist/dropbox.d.ts"],
       "@sp/sync-providers/webdav": ["packages/sync-providers/dist/webdav.d.ts"],
       "@sp/sync-providers/local-file": ["packages/sync-providers/dist/local-file.d.ts"],

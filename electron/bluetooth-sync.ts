@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'fs/promises';
 import { join, resolve, sep } from 'path';
 import { IPC } from './shared-with-frontend/ipc-events.const';
-import { log } from './log';
+import { log } from 'electron-log/main';
 
 interface HelperCommand {
   id: number;
