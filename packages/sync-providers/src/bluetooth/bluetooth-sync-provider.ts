@@ -1,5 +1,6 @@
 import type { SyncLogger } from '@sp/sync-core';
 import type { SyncCredentialStorePort } from '../credential-store-port';
+import type { FileAdapter } from '../file-adapter';
 import {
   InvalidDataSPError,
   RemoteFileNotFoundAPIError,
@@ -43,6 +44,11 @@ export interface BluetoothSyncProviderDeps {
     typeof PROVIDER_ID_BLUETOOTH,
     BluetoothSyncPrivateCfg
   >;
+  // The room's sync file is replicated on every member: reads come from the peer,
+  // writes land on the peer AND here, on the replica this device serves back. A
+  // device that only wrote to its peer would read its own past uploads forever
+  // and never see the peer's operations.
+  localReplica: FileAdapter;
 }
 
 export class BluetoothSyncProvider implements FileSyncProvider<
@@ -116,6 +122,7 @@ export class BluetoothSyncProvider implements FileSyncProvider<
       revToMatch,
       isForceOverwrite,
     }));
+    await this.deps.localReplica.writeFile(targetPath, dataStr);
     return { rev: result.rev };
   }
 
@@ -125,6 +132,7 @@ export class BluetoothSyncProvider implements FileSyncProvider<
       method: 'removeFile',
       targetPath,
     }));
+    await this.deps.localReplica.deleteFile(targetPath).catch(() => undefined);
   }
 
   async listFiles(targetPath: string): Promise<string[]> {
@@ -189,9 +197,10 @@ export class BluetoothSyncProvider implements FileSyncProvider<
   }
 
   private async openSession(): Promise<BluetoothPeerSession> {
-    if (this.activeSession) {
+    if (this.activeSession?.isOpen) {
       return this.activeSession;
     }
+    this.activeSession = null;
     const cfg = await this.privateCfg.load();
     if (!cfg?.localDeviceId) {
       throw new InvalidDataSPError('Bluetooth sync has no local device id');

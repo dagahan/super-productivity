@@ -59,6 +59,10 @@ export class BluetoothPeerSession {
     return response.result;
   }
 
+  get isOpen(): boolean {
+    return !this.isClosed;
+  }
+
   createRequestId(): string {
     this.nextRequestSequence += 1;
     return `${this.nextRequestSequence}`;

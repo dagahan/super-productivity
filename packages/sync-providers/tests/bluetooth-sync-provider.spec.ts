@@ -35,6 +35,7 @@ interface PairedPeers {
     BluetoothSyncPrivateCfg
   >;
   remoteFiles: Map<string, string>;
+  localReplicaFiles: Map<string, string>;
   readRemoteMembers: () => BluetoothRoomMember[];
   closeResponderLink: () => Promise<void>;
 }
@@ -116,12 +117,19 @@ const createPairedPeers = ({
     members: localMembers,
   });
 
-  const provider = new BluetoothSyncProvider({ logger, connector, credentialStore });
+  const localReplicaAdapter = createInMemoryFileAdapter();
+  const provider = new BluetoothSyncProvider({
+    logger,
+    connector,
+    credentialStore,
+    localReplica: localReplicaAdapter,
+  });
 
   return {
     provider,
     credentialStore,
     remoteFiles: remoteAdapter.files,
+    localReplicaFiles: localReplicaAdapter.files,
     readRemoteMembers: () => remoteRoomMembers,
     closeResponderLink: () => responder.close(),
   };
@@ -135,6 +143,27 @@ describe('BluetoothSyncProvider over a loopback link', () => {
 
     expect(remoteFiles.get(SYNC_PATH)).toBe('{"ops":[]}');
     expect(rev).toBe(await md5('{"ops":[]}'));
+  });
+
+  it('replicates every upload onto the copy this device serves back to peers', async () => {
+    const { provider, remoteFiles, localReplicaFiles } = createPairedPeers();
+
+    await provider.uploadFile(SYNC_PATH, '{"ops":["a"]}', null);
+
+    expect(remoteFiles.get(SYNC_PATH)).toBe('{"ops":["a"]}');
+    expect(localReplicaFiles.get(SYNC_PATH)).toBe('{"ops":["a"]}');
+  });
+
+  it('drops a removed file from the replica as well as the peer', async () => {
+    const { provider, remoteFiles, localReplicaFiles } = createPairedPeers({
+      remoteSeed: { [SYNC_PATH]: '{"ops":[]}' },
+    });
+    await provider.uploadFile(SYNC_PATH, '{"ops":["a"]}', null, true);
+
+    await provider.removeFile(SYNC_PATH);
+
+    expect(remoteFiles.has(SYNC_PATH)).toBe(false);
+    expect(localReplicaFiles.has(SYNC_PATH)).toBe(false);
   });
 
   it('downloads what another device uploaded, across many link chunks', async () => {

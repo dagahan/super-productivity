@@ -2,7 +2,6 @@ import {
   BluetoothFileResponder,
   type IncomingInvitation,
   type InvitationOutcome,
-  BluetoothPeerSession,
   BluetoothSyncProvider,
   type BluetoothRoomMember,
   type BluetoothRoomStore,
@@ -82,19 +81,19 @@ export const createBluetoothSyncProvider = (
   });
 
   void bridge
-    .startListening((link) => {
-      new BluetoothPeerSession({
-        link,
-        handleRequest: responder.createPeerHandler(link.peerDeviceId),
-      });
-    })
+    .startListening((link) => connector.adoptIncomingLink(link))
     .catch((error: unknown) => {
       logger.critical('Bluetooth sync could not start listening for peers', {
         errorName: error instanceof Error ? error.name : 'unknown',
       });
     });
 
-  const provider = new BluetoothSyncProvider({ logger, connector, credentialStore });
+  const provider = new BluetoothSyncProvider({
+    logger,
+    connector,
+    credentialStore,
+    localReplica: bridge.sharedFileStore,
+  });
   // Bound before the editor methods are attached: an editor method that shadows
   // a provider method would otherwise call itself instead of the transport.
   const inviteOverTransport = provider.invitePeer.bind(provider);
