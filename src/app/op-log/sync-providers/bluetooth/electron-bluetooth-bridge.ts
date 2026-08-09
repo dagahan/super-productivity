@@ -1,3 +1,4 @@
+import { normalizeDeviceAddress } from '@sp/sync-providers/bluetooth';
 import type { BluetoothLink } from '@sp/sync-providers/bluetooth';
 import type { FileAdapter } from '@sp/sync-providers/file-based';
 import type { ElectronAPI } from '../../../../../electron/electronAPI';
@@ -106,11 +107,24 @@ class ElectronBluetoothBridge implements BluetoothPlatformBridge {
   }
 
   async isPeerBonded(platformAddress: string): Promise<boolean> {
-    const wanted = platformAddress.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+    return (
+      this.hasOpenEncryptedLinkWithPeer(platformAddress) ||
+      (await this.isListedAsSystemPairedDevice(platformAddress))
+    );
+  }
+
+  private hasOpenEncryptedLinkWithPeer(platformAddress: string): boolean {
+    const wanted = normalizeDeviceAddress(platformAddress);
+    return [...this.linksById.values()].some(
+      (link) => normalizeDeviceAddress(link.peerDeviceId) === wanted,
+    );
+  }
+
+  private async isListedAsSystemPairedDevice(platformAddress: string): Promise<boolean> {
+    const wanted = normalizeDeviceAddress(platformAddress);
     const paired = await this.listPairedDevices();
     return paired.some(
-      (device) =>
-        device.platformAddress.replace(/[^0-9a-zA-Z]/g, '').toLowerCase() === wanted,
+      (device) => normalizeDeviceAddress(device.platformAddress) === wanted,
     );
   }
 
