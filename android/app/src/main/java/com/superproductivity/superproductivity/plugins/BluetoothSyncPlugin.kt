@@ -234,7 +234,10 @@ class BluetoothSyncPlugin : Plugin() {
                 link.startReading()
                 call.resolve(JSObject().put("linkId", link.linkId))
             } catch (e: Exception) {
-                call.reject(e.message ?: "Could not open an L2CAP channel")
+                call.reject(
+                    "Could not open the sync channel (${e.message ?: "unknown failure"}). " +
+                        "Forget this device in Bluetooth settings and pair it again."
+                )
             }
         }
     }

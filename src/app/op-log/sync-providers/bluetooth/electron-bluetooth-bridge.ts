@@ -8,6 +8,12 @@ import type {
   BluetoothPlatformBridge,
 } from './bluetooth-platform.port';
 
+const CORE_BLUETOOTH_IDENTIFIER =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const isCoreBluetoothIdentifier = (platformAddress: string): boolean =>
+  CORE_BLUETOOTH_IDENTIFIER.test(platformAddress);
+
 const getElectronApi = (): ElectronAPI => {
   const maybeWindow = window as Window & { ea?: ElectronAPI };
   if (!maybeWindow.ea) {
@@ -130,10 +136,25 @@ class ElectronBluetoothBridge implements BluetoothPlatformBridge {
 
   async connectToDevice(platformAddress: string): Promise<BluetoothLink> {
     this.subscribeToMain();
-    const { linkId } = await getElectronApi().bluetoothSyncConnect({ platformAddress });
+    const { linkId } = await getElectronApi().bluetoothSyncConnect({
+      platformAddress,
+      deviceName: await this.pairedNameOf(platformAddress),
+    });
     const link = new ElectronBluetoothLink(linkId, platformAddress);
     this.linksById.set(linkId, link);
     return link;
+  }
+
+  private async pairedNameOf(platformAddress: string): Promise<string> {
+    if (isCoreBluetoothIdentifier(platformAddress)) {
+      return '';
+    }
+    const wanted = normalizeDeviceAddress(platformAddress);
+    const paired = await this.listPairedDevices();
+    return (
+      paired.find((device) => normalizeDeviceAddress(device.platformAddress) === wanted)
+        ?.deviceName ?? ''
+    );
   }
 
   async startListening(onIncomingLink: (link: BluetoothLink) => void): Promise<void> {

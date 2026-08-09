@@ -208,8 +208,11 @@ export const initBluetoothSync = (getMainWindow: () => BrowserWindow | null): vo
 
   ipcMain.handle(
     IPC.BLUETOOTH_SYNC_CONNECT,
-    async (_event, args: { platformAddress: string }) =>
-      helper.send('connect', { platformAddress: args.platformAddress }),
+    async (_event, args: { platformAddress: string; deviceName: string }) =>
+      helper.send('connect', {
+        platformAddress: args.platformAddress,
+        deviceName: args.deviceName,
+      }),
   );
 
   ipcMain.handle(

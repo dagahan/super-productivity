@@ -88,7 +88,7 @@ class BluetoothPsmExchange(private val context: Context) {
         val advertiser = context.getSystemService(BluetoothManager::class.java)
             ?.adapter?.bluetoothLeAdvertiser ?: return
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_POWER)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
             .setConnectable(true)
             .setTimeout(0)
             .build()
@@ -96,9 +96,16 @@ class BluetoothPsmExchange(private val context: Context) {
             .setIncludeDeviceName(false)
             .addServiceUuid(ParcelUuid(SYNC_SERVICE_UUID))
             .build()
-        val callback = object : AdvertiseCallback() {}
+        val scanResponse = AdvertiseData.Builder()
+            .setIncludeDeviceName(true)
+            .build()
+        val callback = object : AdvertiseCallback() {
+            override fun onStartFailure(errorCode: Int) {
+                Log.i(PSM_LOG_TAG, "Advertising the sync service failed with code $errorCode")
+            }
+        }
         advertiseCallback = callback
-        advertiser.startAdvertising(settings, data, callback)
+        advertiser.startAdvertising(settings, data, scanResponse, callback)
     }
 
     fun readPeerPsm(

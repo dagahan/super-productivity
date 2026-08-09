@@ -75,7 +75,10 @@ export interface ElectronAPI {
   bluetoothSyncListPairedDevices(): Promise<
     { platformAddress: string; deviceName: string; isCurrentlyConnected: boolean }[]
   >;
-  bluetoothSyncConnect(args: { platformAddress: string }): Promise<{ linkId: string }>;
+  bluetoothSyncConnect(args: {
+    platformAddress: string;
+    deviceName: string;
+  }): Promise<{ linkId: string }>;
   bluetoothSyncWrite(args: { linkId: string; dataBase64: string }): Promise<void>;
   bluetoothSyncCloseLink(args: { linkId: string }): Promise<void>;
   bluetoothSyncStartListening(): Promise<{ psm: number }>;
