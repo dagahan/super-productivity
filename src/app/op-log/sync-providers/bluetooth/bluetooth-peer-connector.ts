@@ -21,6 +21,14 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
     return await this.deps.bridge.isAvailable();
   }
 
+  async connectToDevice(platformAddress: string): Promise<BluetoothPeerSession> {
+    const link = await this.deps.bridge.connectToDevice(platformAddress);
+    return new BluetoothPeerSession({
+      link,
+      handleRequest: this.deps.createPeerHandler(platformAddress),
+    });
+  }
+
   async connectToAnyReachableMember(): Promise<BluetoothPeerSession> {
     const members = await this.deps.loadMembers();
     if (!members.length) {

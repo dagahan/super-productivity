@@ -69,12 +69,19 @@ const createPairedPeers = ({
   const fileResponder = new BluetoothFileResponder({
     fileAdapter: remoteAdapter,
     logger,
+    isPeerBonded: async () => true,
+    askUserAboutInvitation: async () => ({
+      decision: 'accepted',
+      isTrustedToInvite: false,
+    }),
     room: {
       loadLocalDeviceId: async () => 'remote-device',
+      loadLocalDeviceName: async () => 'Tablet',
       loadMembers: async () => remoteRoomMembers,
       saveMembers: async (members) => {
         remoteRoomMembers = members;
       },
+      saveRoomSecret: async () => undefined,
     },
   });
 
@@ -96,6 +103,7 @@ const createPairedPeers = ({
   const connector: BluetoothPeerConnector = {
     isAvailable: async () => true,
     connectToAnyReachableMember: async () => initiatorSession,
+    connectToDevice: async () => initiatorSession,
   };
 
   const credentialStore = createStatefulCredentialStore<
@@ -310,6 +318,9 @@ describe('BluetoothSyncProvider over a loopback link', () => {
       connector: {
         isAvailable: async () => true,
         connectToAnyReachableMember: async () => {
+          throw new Error('not expected');
+        },
+        connectToDevice: async () => {
           throw new Error('not expected');
         },
       },

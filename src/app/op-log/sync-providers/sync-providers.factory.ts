@@ -5,6 +5,7 @@ import { IS_ELECTRON } from '../../app.constants';
 import { IS_ANDROID_WEB_VIEW } from '../../util/is-android-web-view';
 import { IS_ONEDRIVE_SUPPORTED } from '../../imex/sync/onedrive-auth-mode.const';
 import { environment } from '../../../environments/environment';
+import type { IncomingInvitation, InvitationOutcome } from '@sp/sync-providers/bluetooth';
 
 let _providersPromise: Promise<SyncProviderBase<SyncProviderId>[]> | null = null;
 
@@ -78,6 +79,14 @@ const _createProviders = async (): Promise<SyncProviderBase<SyncProviderId>[]> =
     providers.push(createLocalFileSyncAndroid() as SyncProviderBase<SyncProviderId>);
   }
 
+  const askUserAboutBluetoothInvitation = async (
+    invitation: IncomingInvitation,
+  ): Promise<InvitationOutcome> => {
+    const { openBluetoothInvitationDialog } =
+      await import('../../imex/sync/encryption-password-dialog-opener.service');
+    return await openBluetoothInvitationDialog(invitation);
+  };
+
   if (IS_ELECTRON) {
     const { createElectronBluetoothBridge } =
       await import('./bluetooth/electron-bluetooth-bridge');
@@ -85,6 +94,7 @@ const _createProviders = async (): Promise<SyncProviderBase<SyncProviderId>[]> =
     providers.push(
       createBluetoothSyncProvider(
         createElectronBluetoothBridge(),
+        askUserAboutBluetoothInvitation,
       ) as SyncProviderBase<SyncProviderId>,
     );
   }
@@ -96,6 +106,7 @@ const _createProviders = async (): Promise<SyncProviderBase<SyncProviderId>[]> =
     providers.push(
       createBluetoothSyncProvider(
         createCapacitorBluetoothBridge(),
+        askUserAboutBluetoothInvitation,
       ) as SyncProviderBase<SyncProviderId>,
     );
   }

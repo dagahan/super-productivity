@@ -6,6 +6,7 @@ import {
   type BluetoothErrorCode,
   type BluetoothRequestMessage,
   type BluetoothResponseMessage,
+  type InvitationDecision,
 } from './bluetooth-message';
 import type { BluetoothRequestHandler } from './bluetooth-peer-session';
 import {
@@ -17,19 +18,41 @@ import type { BluetoothRoomMember } from './bluetooth.model';
 
 export interface BluetoothRoomStore {
   loadLocalDeviceId(): Promise<string>;
+  loadLocalDeviceName(): Promise<string>;
   loadMembers(): Promise<BluetoothRoomMember[]>;
   saveMembers(members: BluetoothRoomMember[]): Promise<void>;
+  saveRoomSecret(roomId: string, encryptKey: string | null): Promise<void>;
+}
+
+export interface IncomingInvitation {
+  peerAddress: string;
+  peerBluetoothName: string;
+  roomId: string;
+  inviterDeviceId: string;
+  inviterDeviceName: string;
+}
+
+export interface InvitationOutcome {
+  decision: InvitationDecision;
+  isTrustedToInvite: boolean;
 }
 
 export interface BluetoothFileResponderDeps {
   fileAdapter: FileAdapter;
   logger: SyncLogger;
   room: BluetoothRoomStore;
+  isPeerBonded: (peerAddress: string) => Promise<boolean>;
+  askUserAboutInvitation: (invitation: IncomingInvitation) => Promise<InvitationOutcome>;
 }
+
+export const INVITATION_REJECTION_COOLDOWN_MS = 60_000;
 
 export class BluetoothFileResponder {
   private readonly writeQueueByPath = new Map<string, Promise<unknown>>();
   private readonly authorizedPeerAddresses = new Set<string>();
+  private readonly rejectedUntilByAddress = new Map<string, number>();
+  private readonly acceptedInvitationsByAddress = new Map<string, string>();
+  private isInvitationPending = false;
 
   constructor(private readonly deps: BluetoothFileResponderDeps) {}
 
@@ -46,13 +69,24 @@ export class BluetoothFileResponder {
     request: BluetoothRequestMessage,
   ): Promise<BluetoothResponseMessage> => {
     try {
+      if (request.method === 'invite') {
+        return await this.respondToInvite(peerAddress, request);
+      }
+      if (request.method === 'roomSecret') {
+        return await this.respondToRoomSecret(peerAddress, request);
+      }
       if (request.method === 'hello') {
         return await this.respondToHello(peerAddress, request);
       }
       if (!this.authorizedPeerAddresses.has(normalizeDeviceAddress(peerAddress))) {
         return failure(request.id, 'notAuthorized', 'Peer did not complete handshake');
       }
-      return await this.respondToFileRequest(request);
+      return await this.respondToFileRequest(
+        request as Exclude<
+          BluetoothRequestMessage,
+          { method: 'hello' | 'invite' | 'roomSecret' }
+        >,
+      );
     } catch (error) {
       const errorCode = classifyError(error);
       if (errorCode === 'unknown') {
@@ -63,6 +97,106 @@ export class BluetoothFileResponder {
       return failure(request.id, errorCode, messageOf(error));
     }
   };
+
+  private async respondToInvite(
+    peerAddress: string,
+    request: Extract<BluetoothRequestMessage, { method: 'invite' }>,
+  ): Promise<BluetoothResponseMessage> {
+    if (request.protocolVersion !== BLUETOOTH_PROTOCOL_VERSION) {
+      return failure(
+        request.id,
+        'unsupportedProtocolVersion',
+        `Peer speaks protocol ${request.protocolVersion}, this device speaks ${BLUETOOTH_PROTOCOL_VERSION}`,
+      );
+    }
+    if (!(await this.deps.isPeerBonded(peerAddress))) {
+      return failure(
+        request.id,
+        'peerNotBonded',
+        'Pair this device in your system Bluetooth settings first',
+      );
+    }
+
+    const normalizedAddress = normalizeDeviceAddress(peerAddress);
+    const rejectedUntil = this.rejectedUntilByAddress.get(normalizedAddress) ?? 0;
+    if (Date.now() < rejectedUntil) {
+      return failure(request.id, 'invitationRejected', 'This invitation was declined');
+    }
+    if (this.isInvitationPending) {
+      return failure(
+        request.id,
+        'invitationBusy',
+        'Another invitation is already waiting for an answer',
+      );
+    }
+
+    this.isInvitationPending = true;
+    let outcome: InvitationOutcome;
+    try {
+      outcome = await this.deps.askUserAboutInvitation({
+        peerAddress,
+        peerBluetoothName: request.inviterDeviceName,
+        roomId: request.roomId,
+        inviterDeviceId: request.inviterDeviceId,
+        inviterDeviceName: request.inviterDeviceName,
+      });
+    } finally {
+      this.isInvitationPending = false;
+    }
+
+    if (outcome.decision === 'rejected') {
+      this.rejectedUntilByAddress.set(
+        normalizedAddress,
+        Date.now() + INVITATION_REJECTION_COOLDOWN_MS,
+      );
+      return failure(request.id, 'invitationRejected', 'The invitation was declined');
+    }
+
+    const members = await this.deps.room.loadMembers();
+    if (!findMemberByAddress(members, peerAddress)) {
+      await this.deps.room.saveMembers([
+        ...members,
+        {
+          deviceId: request.inviterDeviceId,
+          deviceName: request.inviterDeviceName,
+          platformAddress: peerAddress,
+          isTrustedToInvite: outcome.isTrustedToInvite,
+          invitedByDeviceId: null,
+        },
+      ]);
+    }
+    this.acceptedInvitationsByAddress.set(normalizedAddress, request.roomId);
+
+    return {
+      id: request.id,
+      isOk: true,
+      result: {
+        decision: 'accepted',
+        deviceId: await this.deps.room.loadLocalDeviceId(),
+        deviceName: await this.deps.room.loadLocalDeviceName(),
+        isTrustedToInvite: outcome.isTrustedToInvite,
+      },
+    };
+  }
+
+  private async respondToRoomSecret(
+    peerAddress: string,
+    request: Extract<BluetoothRequestMessage, { method: 'roomSecret' }>,
+  ): Promise<BluetoothResponseMessage> {
+    const normalizedAddress = normalizeDeviceAddress(peerAddress);
+    const roomId = this.acceptedInvitationsByAddress.get(normalizedAddress);
+    if (!roomId) {
+      return failure(
+        request.id,
+        'notAuthorized',
+        'No accepted invitation for this device',
+      );
+    }
+    this.acceptedInvitationsByAddress.delete(normalizedAddress);
+    await this.deps.room.saveRoomSecret(roomId, request.encryptKey);
+    this.authorizedPeerAddresses.add(normalizedAddress);
+    return { id: request.id, isOk: true, result: null };
+  }
 
   private async respondToHello(
     peerAddress: string,
@@ -105,7 +239,10 @@ export class BluetoothFileResponder {
   }
 
   private async respondToFileRequest(
-    request: Exclude<BluetoothRequestMessage, { method: 'hello' }>,
+    request: Exclude<
+      BluetoothRequestMessage,
+      { method: 'hello' | 'invite' | 'roomSecret' }
+    >,
   ): Promise<BluetoothResponseMessage> {
     switch (request.method) {
       case 'getFileRev': {

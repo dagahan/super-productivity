@@ -15,6 +15,7 @@ import {
   type FileDownloadResult,
   type FileRevResult,
   type HelloResult,
+  type InviteResult,
   type ListFilesResult,
 } from './bluetooth-message';
 import { BluetoothPeerError, type BluetoothPeerSession } from './bluetooth-peer-session';
@@ -24,6 +25,15 @@ import { PROVIDER_ID_BLUETOOTH, type BluetoothSyncPrivateCfg } from './bluetooth
 export interface BluetoothPeerConnector {
   isAvailable(): Promise<boolean>;
   connectToAnyReachableMember(): Promise<BluetoothPeerSession>;
+  connectToDevice(platformAddress: string): Promise<BluetoothPeerSession>;
+}
+
+export interface InvitationRequest {
+  platformAddress: string;
+  roomId: string;
+  inviterDeviceId: string;
+  inviterDeviceName: string;
+  encryptKey: string | null;
 }
 
 export interface BluetoothSyncProviderDeps {
@@ -124,6 +134,38 @@ export class BluetoothSyncProvider implements FileSyncProvider<
       targetPath,
     }));
     return result.filePaths;
+  }
+
+  /**
+   * Bootstraps a room with a device that is bonded but not yet a member. The
+   * secret is only sent once the peer has answered, so a declined invitation
+   * transmits nothing.
+   */
+  async invitePeer(invitation: InvitationRequest): Promise<InviteResult> {
+    const session = await this.deps.connector.connectToDevice(invitation.platformAddress);
+    try {
+      const result = (await session.send({
+        id: session.createRequestId(),
+        method: 'invite',
+        protocolVersion: BLUETOOTH_PROTOCOL_VERSION,
+        roomId: invitation.roomId,
+        inviterDeviceId: invitation.inviterDeviceId,
+        inviterDeviceName: invitation.inviterDeviceName,
+      })) as InviteResult;
+
+      if (result.decision !== 'accepted') {
+        return result;
+      }
+
+      await session.send({
+        id: session.createRequestId(),
+        method: 'roomSecret',
+        encryptKey: invitation.encryptKey,
+      });
+      return result;
+    } finally {
+      await session.close().catch(() => undefined);
+    }
   }
 
   async disconnect(): Promise<void> {

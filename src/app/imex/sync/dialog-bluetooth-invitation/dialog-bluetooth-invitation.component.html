@@ -1,0 +1,34 @@
+<h1 mat-dialog-title>{{ T.F.SYNC.FORM.BLUETOOTH.INVITATION_TITLE | translate }}</h1>
+
+<mat-dialog-content>
+  <p>
+    {{
+      T.F.SYNC.FORM.BLUETOOTH.INVITATION_TEXT
+        | translate: { deviceName: invitation.inviterDeviceName }
+    }}
+  </p>
+  <p>{{ invitation.peerAddress }}</p>
+
+  <mat-checkbox
+    [checked]="isTrustedToInvite()"
+    (change)="isTrustedToInvite.set($event.checked)"
+  >
+    {{ T.F.SYNC.FORM.BLUETOOTH.L_TRUSTED_TO_INVITE | translate }}
+  </mat-checkbox>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button
+    mat-button
+    (click)="reject()"
+  >
+    {{ T.F.SYNC.FORM.BLUETOOTH.INVITATION_REJECT | translate }}
+  </button>
+  <button
+    mat-flat-button
+    color="primary"
+    (click)="accept()"
+  >
+    {{ T.F.SYNC.FORM.BLUETOOTH.INVITATION_ACCEPT | translate }}
+  </button>
+</mat-dialog-actions>

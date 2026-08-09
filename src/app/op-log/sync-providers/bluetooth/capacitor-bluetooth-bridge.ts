@@ -147,6 +147,15 @@ class CapacitorBluetoothBridge implements BluetoothPlatformBridge {
     return (await BluetoothSyncBridge.listPairedDevices()).devices;
   }
 
+  async isPeerBonded(platformAddress: string): Promise<boolean> {
+    const wanted = platformAddress.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+    const paired = await this.listPairedDevices();
+    return paired.some(
+      (device) =>
+        device.platformAddress.replace(/[^0-9a-zA-Z]/g, '').toLowerCase() === wanted,
+    );
+  }
+
   async connectToDevice(platformAddress: string): Promise<BluetoothLink> {
     await this.subscribeToPlugin();
     const { linkId } = await BluetoothSyncBridge.connectToDevice({ platformAddress });

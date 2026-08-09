@@ -26,9 +26,23 @@ export type BluetoothRequestMessage =
       isForceOverwrite: boolean;
     }
   | { id: string; method: 'removeFile'; targetPath: string }
-  | { id: string; method: 'listFiles'; targetPath: string };
+  | { id: string; method: 'listFiles'; targetPath: string }
+  | {
+      id: string;
+      method: 'invite';
+      protocolVersion: number;
+      roomId: string;
+      inviterDeviceId: string;
+      inviterDeviceName: string;
+    }
+  | { id: string; method: 'roomSecret'; encryptKey: string | null };
 
 export type BluetoothRequestMethod = BluetoothRequestMessage['method'];
+
+export const PRE_MEMBERSHIP_METHODS: ReadonlySet<BluetoothRequestMethod> = new Set([
+  'invite',
+  'roomSecret',
+]);
 
 export type BluetoothErrorCode =
   | 'remoteFileNotFound'
@@ -36,6 +50,9 @@ export type BluetoothErrorCode =
   | 'invalidData'
   | 'unsupportedProtocolVersion'
   | 'notAuthorized'
+  | 'peerNotBonded'
+  | 'invitationRejected'
+  | 'invitationBusy'
   | 'unknown';
 
 export type BluetoothResponseMessage =
@@ -64,6 +81,15 @@ export interface FileDownloadResult {
 
 export interface ListFilesResult {
   filePaths: string[];
+}
+
+export type InvitationDecision = 'accepted' | 'rejected';
+
+export interface InviteResult {
+  decision: InvitationDecision;
+  deviceId: string;
+  deviceName: string;
+  isTrustedToInvite: boolean;
 }
 
 const textEncoder = new TextEncoder();

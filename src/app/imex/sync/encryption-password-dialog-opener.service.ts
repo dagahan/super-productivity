@@ -11,6 +11,7 @@ import {
   EnableEncryptionResult,
 } from './dialog-enable-encryption/dialog-enable-encryption.component';
 import { firstValueFrom } from 'rxjs';
+import type { IncomingInvitation, InvitationOutcome } from '@sp/sync-providers/bluetooth';
 
 // Module-level reference, set by the service constructor
 let dialogOpenerInstance: EncryptionPasswordDialogOpenerService | null = null;
@@ -49,6 +50,19 @@ export class EncryptionPasswordDialogOpenerService {
 
   closeAllDialogs(): void {
     this._matDialog.closeAll();
+  }
+
+  async openBluetoothInvitationDialog(
+    invitation: IncomingInvitation,
+  ): Promise<InvitationOutcome> {
+    const { DialogBluetoothInvitationComponent } =
+      await import('./dialog-bluetooth-invitation/dialog-bluetooth-invitation.component');
+    const dialogRef = this._matDialog.open(DialogBluetoothInvitationComponent, {
+      data: invitation,
+      disableClose: true,
+    });
+    const outcome = await firstValueFrom(dialogRef.afterClosed());
+    return outcome ?? { decision: 'rejected', isTrustedToInvite: false };
   }
 
   async openBluetoothRoomDialog(): Promise<void> {
@@ -109,3 +123,8 @@ export const closeAllDialogs = (): void => {
 
 export const openBluetoothRoomDialog = (): Promise<void> =>
   callOpener((opener) => opener.openBluetoothRoomDialog());
+
+export const openBluetoothInvitationDialog = (
+  invitation: IncomingInvitation,
+): Promise<InvitationOutcome> =>
+  callOpener((opener) => opener.openBluetoothInvitationDialog(invitation));

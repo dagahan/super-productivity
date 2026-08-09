@@ -1421,10 +1421,15 @@
         "REAUTH_SUCCESS": "Re-authentication successful! Credentials updated.",
         "BLUETOOTH": {
           "INFO_TEXT": "Syncs directly with your other devices over Bluetooth, with no server involved. Devices must already be paired in your system Bluetooth settings.",
+          "INVITATION_ACCEPT": "Accept",
+          "INVITATION_REJECT": "Reject",
+          "INVITATION_TEXT": "\"{{deviceName}}\" wants to sync with this device.",
+          "INVITATION_TITLE": "Sync request",
           "L_ADD_DEVICE": "Add a paired device",
           "L_NO_DEVICES": "No devices added yet.",
           "L_ROOM_DEVICES": "Devices in this sync room",
           "L_TRUSTED_TO_INVITE": "Let this device introduce others",
+          "S_INVITATION_REJECTED": "The other device declined the request.",
           "S_NO_MEMBER_REACHABLE": "No device from this sync room is in range."
         },
         "DROPBOX": {

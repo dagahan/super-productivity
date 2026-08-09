@@ -25,7 +25,10 @@ export {
   type FileDownloadResult,
   type FileRevResult,
   type HelloResult,
+  type InvitationDecision,
+  type InviteResult,
   type ListFilesResult,
+  PRE_MEMBERSHIP_METHODS,
 } from './bluetooth/bluetooth-message';
 export {
   BluetoothPeerError,
@@ -40,6 +43,9 @@ export {
   RevToMatchMismatchError,
   type BluetoothFileResponderDeps,
   type BluetoothRoomStore,
+  type IncomingInvitation,
+  type InvitationOutcome,
+  INVITATION_REJECTION_COOLDOWN_MS,
 } from './bluetooth/bluetooth-file-responder';
 export {
   findMemberByAddress,
@@ -54,6 +60,7 @@ export {
   BluetoothSyncProvider,
   type BluetoothPeerConnector,
   type BluetoothSyncProviderDeps,
+  type InvitationRequest,
 } from './bluetooth/bluetooth-sync-provider';
 export {
   PROVIDER_ID_BLUETOOTH,

@@ -51,16 +51,28 @@ export class DialogBluetoothRoomComponent {
     void this._load();
   }
 
-  addDevice(device: BluetoothPairedDevice): void {
-    const member: BluetoothRoomMember = {
-      deviceId: device.platformAddress,
-      deviceName: device.deviceName,
-      platformAddress: device.platformAddress,
-      isTrustedToInvite: false,
-      invitedByDeviceId: null,
-    };
-    this.members.update((current) => [...current, member]);
-    this._refreshAddableDevices();
+  readonly invitingAddress = signal<string | null>(null);
+
+  async inviteDevice(device: BluetoothPairedDevice): Promise<void> {
+    this.loadError.set(null);
+    this.invitingAddress.set(device.platformAddress);
+    try {
+      const result = await this.editor?.invitePeer(
+        device.platformAddress,
+        device.deviceName,
+      );
+      if (result?.decision !== 'accepted') {
+        this.loadError.set('The other device declined the request.');
+        return;
+      }
+      const room = await this.editor?.loadRoom();
+      this.members.set(room?.members ?? []);
+      await this._refreshAddableDevices();
+    } catch (error) {
+      this.loadError.set(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.invitingAddress.set(null);
+    }
   }
 
   removeMember(deviceId: string): void {

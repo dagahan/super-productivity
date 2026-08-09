@@ -1,9 +1,12 @@
 import {
   BluetoothFileResponder,
+  type IncomingInvitation,
+  type InvitationOutcome,
   BluetoothPeerSession,
   BluetoothSyncProvider,
   type BluetoothRoomMember,
   type BluetoothRoomStore,
+  type InviteResult,
 } from '@sp/sync-providers/bluetooth';
 import { OP_LOG_SYNC_LOGGER } from '../../core/sync-logger.adapter';
 import { SyncCredentialStore } from '../credential-store.service';
@@ -37,15 +40,25 @@ const createRoomStore = (
     });
     return localDeviceId;
   },
+  loadLocalDeviceName: async (): Promise<string> =>
+    (await credentialStore.load())?.localDeviceName ??
+    (await bridge.getLocalDeviceName()),
   loadMembers: async (): Promise<BluetoothRoomMember[]> =>
     (await credentialStore.load())?.members ?? [],
   saveMembers: async (members: BluetoothRoomMember[]): Promise<void> => {
     await credentialStore.upsertPartial({ members });
   },
+  saveRoomSecret: async (roomId: string, encryptKey: string | null): Promise<void> => {
+    await credentialStore.upsertPartial({
+      roomId,
+      ...(encryptKey ? { encryptKey, isEncryptionEnabled: true } : {}),
+    });
+  },
 });
 
 export const createBluetoothSyncProvider = (
   bridge: BluetoothPlatformBridge,
+  askUserAboutInvitation: (invitation: IncomingInvitation) => Promise<InvitationOutcome>,
 ): BluetoothSyncProvider => {
   const logger = OP_LOG_SYNC_LOGGER;
   const credentialStore = new SyncCredentialStore(
@@ -57,6 +70,8 @@ export const createBluetoothSyncProvider = (
     fileAdapter: bridge.sharedFileStore,
     logger,
     room,
+    isPeerBonded: (peerAddress) => bridge.isPeerBonded(peerAddress),
+    askUserAboutInvitation: (invitation) => askUserAboutInvitation(invitation),
   });
 
   const connector = new ReachableMemberConnector({
@@ -90,6 +105,35 @@ export const createBluetoothSyncProvider = (
       members: await room.loadMembers(),
     }),
     saveRoomMembers: (members: BluetoothRoomMember[]) => room.saveMembers(members),
+    invitePeer: async (
+      platformAddress: string,
+      deviceName: string,
+    ): Promise<InviteResult> => {
+      const cfg = await credentialStore.load();
+      const roomId = cfg?.roomId ?? createLocalDeviceId();
+      const result = await provider.invitePeer({
+        platformAddress,
+        roomId,
+        inviterDeviceId: await room.loadLocalDeviceId(),
+        inviterDeviceName: await room.loadLocalDeviceName(),
+        encryptKey: cfg?.encryptKey ?? null,
+      });
+      if (result.decision === 'accepted') {
+        const members = await room.loadMembers();
+        await room.saveMembers([
+          ...members,
+          {
+            deviceId: result.deviceId,
+            deviceName: result.deviceName || deviceName,
+            platformAddress,
+            isTrustedToInvite: false,
+            invitedByDeviceId: null,
+          },
+        ]);
+        await credentialStore.upsertPartial({ roomId });
+      }
+      return result;
+    },
   });
 };
 
@@ -103,4 +147,5 @@ export interface BluetoothRoomEditor {
   listPairedDevices(): Promise<BluetoothPairedDevice[]>;
   loadRoom(): Promise<BluetoothRoomView>;
   saveRoomMembers(members: BluetoothRoomMember[]): Promise<void>;
+  invitePeer(platformAddress: string, deviceName: string): Promise<InviteResult>;
 }

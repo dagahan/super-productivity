@@ -12,6 +12,7 @@ export interface BluetoothPlatformBridge {
   isAvailable(): Promise<boolean>;
   getLocalDeviceName(): Promise<string>;
   listPairedDevices(): Promise<BluetoothPairedDevice[]>;
+  isPeerBonded(platformAddress: string): Promise<boolean>;
   connectToDevice(platformAddress: string): Promise<BluetoothLink>;
   startListening(onIncomingLink: (link: BluetoothLink) => void): Promise<void>;
   stopListening(): Promise<void>;
