@@ -357,6 +357,7 @@ describe('BluetoothSyncProvider over a loopback link', () => {
         typeof PROVIDER_ID_BLUETOOTH,
         BluetoothSyncPrivateCfg
       >({ roomId: 'room-1', localDeviceId: 'local-device', members: [] }),
+      localReplica: createInMemoryFileAdapter(),
     });
 
     await expect(provider.isReady()).resolves.toBe(false);
