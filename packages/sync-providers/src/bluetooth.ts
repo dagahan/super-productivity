@@ -42,8 +42,10 @@ export {
   type BluetoothRoomStore,
 } from './bluetooth/bluetooth-file-responder';
 export {
+  findMemberByAddress,
   isRoomMember,
   isTrustedToInvite,
+  normalizeDeviceAddress,
   mergeRoomMembers,
   type RoomMemberMergeInput,
   type RoomMemberMergeResult,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { isTrustedToInvite, mergeRoomMembers } from '../src/bluetooth/bluetooth-room';
+import {
+  findMemberByAddress,
+  isTrustedToInvite,
+  mergeRoomMembers,
+  normalizeDeviceAddress,
+} from '../src/bluetooth/bluetooth-room';
 import type { BluetoothRoomMember } from '../src/bluetooth/bluetooth.model';
 
 const member = (
@@ -129,5 +134,18 @@ describe('bluetooth room membership', () => {
     expect(isTrustedToInvite(members, 'tablet')).toBe(true);
     expect(isTrustedToInvite(members, 'phone')).toBe(false);
     expect(isTrustedToInvite(members, 'stranger')).toBe(false);
+  });
+
+  it('treats the macOS and Android spellings of one address as the same device', () => {
+    expect(normalizeDeviceAddress('44-cb-ad-5d-06-4d')).toBe(
+      normalizeDeviceAddress('44:CB:AD:5D:06:4D'),
+    );
+  });
+
+  it('finds a member however the platform spelled its address', () => {
+    const members = [member('tablet', { platformAddress: '44:CB:AD:5D:06:4D' })];
+
+    expect(findMemberByAddress(members, '44-cb-ad-5d-06-4d')?.deviceId).toBe('tablet');
+    expect(findMemberByAddress(members, '00:00:00:00:00:00')).toBeUndefined();
   });
 });

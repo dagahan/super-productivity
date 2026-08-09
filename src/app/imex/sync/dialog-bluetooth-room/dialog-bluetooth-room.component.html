@@ -3,6 +3,8 @@
 <mat-dialog-content>
   @if (isLoading()) {
     <mat-spinner diameter="32"></mat-spinner>
+  } @else if (loadError()) {
+    <p class="load-error">{{ loadError() }}</p>
   } @else {
     <p>{{ T.F.SYNC.FORM.BLUETOOTH.INFO_TEXT | translate }}</p>
 

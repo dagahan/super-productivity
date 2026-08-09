@@ -171,7 +171,7 @@ export class BluetoothSyncProvider implements FileSyncProvider<
       peerMembers: hello.members ?? [],
     });
     if (merged.addedDeviceIds.length) {
-      await this.privateCfg.updatePartial({ members: merged.members });
+      await this.privateCfg.upsertPartial({ members: merged.members });
     }
 
     this.deps.logger.normal('BluetoothSyncProvider connected', {

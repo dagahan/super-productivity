@@ -12,8 +12,23 @@ export interface RoomMemberMergeResult {
   addedDeviceIds: string[];
 }
 
+/** Platforms spell the same address differently: macOS uses hyphens and
+ * lowercase, Android uses colons and uppercase. */
+export const normalizeDeviceAddress = (address: string): string =>
+  address.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+
 export const isRoomMember = (members: BluetoothRoomMember[], deviceId: string): boolean =>
   members.some((member) => member.deviceId === deviceId);
+
+export const findMemberByAddress = (
+  members: BluetoothRoomMember[],
+  platformAddress: string,
+): BluetoothRoomMember | undefined => {
+  const wanted = normalizeDeviceAddress(platformAddress);
+  return members.find(
+    (member) => normalizeDeviceAddress(member.platformAddress) === wanted,
+  );
+};
 
 export const isTrustedToInvite = (
   members: BluetoothRoomMember[],

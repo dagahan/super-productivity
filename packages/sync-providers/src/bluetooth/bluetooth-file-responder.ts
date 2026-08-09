@@ -7,7 +7,12 @@ import {
   type BluetoothRequestMessage,
   type BluetoothResponseMessage,
 } from './bluetooth-message';
-import { isRoomMember, mergeRoomMembers } from './bluetooth-room';
+import type { BluetoothRequestHandler } from './bluetooth-peer-session';
+import {
+  findMemberByAddress,
+  mergeRoomMembers,
+  normalizeDeviceAddress,
+} from './bluetooth-room';
 import type { BluetoothRoomMember } from './bluetooth.model';
 
 export interface BluetoothRoomStore {
@@ -24,18 +29,27 @@ export interface BluetoothFileResponderDeps {
 
 export class BluetoothFileResponder {
   private readonly writeQueueByPath = new Map<string, Promise<unknown>>();
-  private authorizedPeerDeviceId: string | null = null;
+  private readonly authorizedPeerAddresses = new Set<string>();
 
   constructor(private readonly deps: BluetoothFileResponderDeps) {}
 
-  readonly handleRequest = async (
+  /**
+   * A peer is identified by the address of the link it connected over, which
+   * the Bluetooth bond authenticates, never by the id it claims in its hello.
+   */
+  createPeerHandler(peerAddress: string): BluetoothRequestHandler {
+    return (request) => this.handleRequestFromPeer(peerAddress, request);
+  }
+
+  private handleRequestFromPeer = async (
+    peerAddress: string,
     request: BluetoothRequestMessage,
   ): Promise<BluetoothResponseMessage> => {
     try {
       if (request.method === 'hello') {
-        return await this.respondToHello(request);
+        return await this.respondToHello(peerAddress, request);
       }
-      if (!this.authorizedPeerDeviceId) {
+      if (!this.authorizedPeerAddresses.has(normalizeDeviceAddress(peerAddress))) {
         return failure(request.id, 'notAuthorized', 'Peer did not complete handshake');
       }
       return await this.respondToFileRequest(request);
@@ -51,6 +65,7 @@ export class BluetoothFileResponder {
   };
 
   private async respondToHello(
+    peerAddress: string,
     request: Extract<BluetoothRequestMessage, { method: 'hello' }>,
   ): Promise<BluetoothResponseMessage> {
     if (request.protocolVersion !== BLUETOOTH_PROTOCOL_VERSION) {
@@ -62,21 +77,22 @@ export class BluetoothFileResponder {
     }
     const localDeviceId = await this.deps.room.loadLocalDeviceId();
     const localMembers = await this.deps.room.loadMembers();
-    if (!isRoomMember(localMembers, request.deviceId)) {
+    const peerMember = findMemberByAddress(localMembers, peerAddress);
+    if (!peerMember) {
       return failure(request.id, 'notAuthorized', 'Peer is not a member of this room');
     }
 
     const merged = mergeRoomMembers({
       localDeviceId,
       localMembers,
-      peerDeviceId: request.deviceId,
+      peerDeviceId: peerMember.deviceId,
       peerMembers: request.members,
     });
     if (merged.addedDeviceIds.length) {
       await this.deps.room.saveMembers(merged.members);
     }
 
-    this.authorizedPeerDeviceId = request.deviceId;
+    this.authorizedPeerAddresses.add(normalizeDeviceAddress(peerAddress));
     return {
       id: request.id,
       isOk: true,

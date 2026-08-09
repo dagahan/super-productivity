@@ -31,7 +31,7 @@ const createRoomStore = (
       return cfg.localDeviceId;
     }
     const localDeviceId = createLocalDeviceId();
-    await credentialStore.updatePartial({
+    await credentialStore.upsertPartial({
       localDeviceId,
       localDeviceName: await bridge.getLocalDeviceName(),
     });
@@ -40,7 +40,7 @@ const createRoomStore = (
   loadMembers: async (): Promise<BluetoothRoomMember[]> =>
     (await credentialStore.load())?.members ?? [],
   saveMembers: async (members: BluetoothRoomMember[]): Promise<void> => {
-    await credentialStore.updatePartial({ members });
+    await credentialStore.upsertPartial({ members });
   },
 });
 
@@ -63,12 +63,15 @@ export const createBluetoothSyncProvider = (
     bridge,
     logger,
     loadMembers: room.loadMembers,
-    handleRequest: responder.handleRequest,
+    createPeerHandler: (peerAddress) => responder.createPeerHandler(peerAddress),
   });
 
   void bridge
     .startListening((link) => {
-      new BluetoothPeerSession({ link, handleRequest: responder.handleRequest });
+      new BluetoothPeerSession({
+        link,
+        handleRequest: responder.createPeerHandler(link.peerDeviceId),
+      });
     })
     .catch((error: unknown) => {
       logger.critical('Bluetooth sync could not start listening for peers', {

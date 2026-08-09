@@ -41,6 +41,7 @@ export class DialogBluetoothRoomComponent {
 
   readonly T = T;
   readonly isLoading = signal(true);
+  readonly loadError = signal<string | null>(null);
   readonly members = signal<BluetoothRoomMember[]>([]);
   readonly addableDevices = signal<BluetoothPairedDevice[]>([]);
 
@@ -78,8 +79,12 @@ export class DialogBluetoothRoomComponent {
   }
 
   async save(): Promise<void> {
-    await this.editor?.saveRoomMembers(this.members());
-    this._matDialogRef.close(true);
+    try {
+      await this.editor?.saveRoomMembers(this.members());
+      this._matDialogRef.close(true);
+    } catch (error) {
+      this.loadError.set(error instanceof Error ? error.message : String(error));
+    }
   }
 
   close(): void {
@@ -87,17 +92,22 @@ export class DialogBluetoothRoomComponent {
   }
 
   private async _load(): Promise<void> {
-    const providers = await loadSyncProviders();
-    const provider = providers.find((entry) => entry.id === SyncProviderId.Bluetooth);
-    this.editor = provider as unknown as BluetoothRoomEditor | null;
-    if (!this.editor) {
+    try {
+      const providers = await loadSyncProviders();
+      const provider = providers.find((entry) => entry.id === SyncProviderId.Bluetooth);
+      this.editor = provider as unknown as BluetoothRoomEditor | null;
+      if (!this.editor) {
+        this.loadError.set('Bluetooth sync is not available on this device');
+        return;
+      }
+      const room = await this.editor.loadRoom();
+      this.members.set(room.members);
+      await this._refreshAddableDevices();
+    } catch (error) {
+      this.loadError.set(error instanceof Error ? error.message : String(error));
+    } finally {
       this.isLoading.set(false);
-      return;
     }
-    const room = await this.editor.loadRoom();
-    this.members.set(room.members);
-    await this._refreshAddableDevices();
-    this.isLoading.set(false);
   }
 
   private async _refreshAddableDevices(): Promise<void> {

@@ -11,7 +11,7 @@ export interface ReachableMemberConnectorDeps {
   bridge: BluetoothPlatformBridge;
   logger: SyncLogger;
   loadMembers: () => Promise<BluetoothRoomMember[]>;
-  handleRequest: BluetoothRequestHandler;
+  createPeerHandler: (peerAddress: string) => BluetoothRequestHandler;
 }
 
 export class ReachableMemberConnector implements BluetoothPeerConnector {
@@ -33,7 +33,7 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
         const link = await this.deps.bridge.connectToDevice(member.platformAddress);
         return new BluetoothPeerSession({
           link,
-          handleRequest: this.deps.handleRequest,
+          handleRequest: this.deps.createPeerHandler(member.platformAddress),
         });
       } catch (error) {
         failureReasons.push(error instanceof Error ? error.message : String(error));

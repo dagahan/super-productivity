@@ -80,7 +80,7 @@ const createPairedPeers = ({
 
   new BluetoothPeerSession({
     link: responder,
-    handleRequest: fileResponder.handleRequest,
+    handleRequest: fileResponder.createPeerHandler('44:CB:AD:5D:06:4D'),
   });
 
   const initiatorSession = new BluetoothPeerSession({
