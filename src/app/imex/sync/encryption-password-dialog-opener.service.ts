@@ -11,6 +11,8 @@ import {
   EnableEncryptionResult,
 } from './dialog-enable-encryption/dialog-enable-encryption.component';
 import { firstValueFrom } from 'rxjs';
+import { NotifyService } from '../../core/notify/notify.service';
+import { T } from '../../t.const';
 import type { IncomingInvitation, InvitationOutcome } from '@sp/sync-providers/bluetooth';
 
 // Module-level reference, set by the service constructor
@@ -42,6 +44,7 @@ const callOpener = <T>(fn: (opener: EncryptionPasswordDialogOpenerService) => T)
 })
 export class EncryptionPasswordDialogOpenerService {
   private _matDialog = inject(MatDialog);
+  private _notifyService = inject(NotifyService);
 
   constructor() {
     // Self-register so module-level functions can delegate to this instance
@@ -55,6 +58,15 @@ export class EncryptionPasswordDialogOpenerService {
   async openBluetoothInvitationDialog(
     invitation: IncomingInvitation,
   ): Promise<InvitationOutcome> {
+    // The dialog is only visible once the app is in front, so a backgrounded
+    // device gets a notification to bring it there; the request stays pending
+    // until the user answers.
+    void this._notifyService.notify({
+      title: T.F.SYNC.FORM.BLUETOOTH.INVITATION_TITLE,
+      body: T.F.SYNC.FORM.BLUETOOTH.INVITATION_TEXT,
+      translateParams: { deviceName: invitation.inviterDeviceName },
+    });
+
     const { DialogBluetoothInvitationComponent } =
       await import('./dialog-bluetooth-invitation/dialog-bluetooth-invitation.component');
     const dialogRef = this._matDialog.open(DialogBluetoothInvitationComponent, {
