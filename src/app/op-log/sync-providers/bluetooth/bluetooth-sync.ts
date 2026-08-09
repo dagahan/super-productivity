@@ -95,6 +95,10 @@ export const createBluetoothSyncProvider = (
     });
 
   const provider = new BluetoothSyncProvider({ logger, connector, credentialStore });
+  // Bound before the editor methods are attached: an editor method that shadows
+  // a provider method would otherwise call itself instead of the transport.
+  const inviteOverTransport = provider.invitePeer.bind(provider);
+
   return Object.assign(provider, {
     listPairedDevices: () => bridge.listPairedDevices(),
     loadRoom: async (): Promise<BluetoothRoomView> => ({
@@ -105,13 +109,13 @@ export const createBluetoothSyncProvider = (
       members: await room.loadMembers(),
     }),
     saveRoomMembers: (members: BluetoothRoomMember[]) => room.saveMembers(members),
-    invitePeer: async (
+    invitePairedDevice: async (
       platformAddress: string,
       deviceName: string,
     ): Promise<InviteResult> => {
       const cfg = await credentialStore.load();
       const roomId = cfg?.roomId ?? createLocalDeviceId();
-      const result = await provider.invitePeer({
+      const result = await inviteOverTransport({
         platformAddress,
         roomId,
         inviterDeviceId: await room.loadLocalDeviceId(),
@@ -147,5 +151,5 @@ export interface BluetoothRoomEditor {
   listPairedDevices(): Promise<BluetoothPairedDevice[]>;
   loadRoom(): Promise<BluetoothRoomView>;
   saveRoomMembers(members: BluetoothRoomMember[]): Promise<void>;
-  invitePeer(platformAddress: string, deviceName: string): Promise<InviteResult>;
+  invitePairedDevice(platformAddress: string, deviceName: string): Promise<InviteResult>;
 }

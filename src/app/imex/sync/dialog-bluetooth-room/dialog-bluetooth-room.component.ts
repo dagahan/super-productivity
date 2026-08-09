@@ -57,7 +57,7 @@ export class DialogBluetoothRoomComponent {
     this.loadError.set(null);
     this.invitingAddress.set(device.platformAddress);
     try {
-      const result = await this.editor?.invitePeer(
+      const result = await this.editor?.invitePairedDevice(
         device.platformAddress,
         device.deviceName,
       );
