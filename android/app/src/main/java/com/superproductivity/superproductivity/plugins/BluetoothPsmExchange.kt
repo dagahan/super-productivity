@@ -18,12 +18,14 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
+import android.util.Log
 import java.util.UUID
 
 val PSM_CHARACTERISTIC_UUID: UUID =
     UUID.fromString("7a9c1e44-5b3d-4f21-9c86-2e1d0a7b4f33")
 
-private const val PSM_READ_TIMEOUT_MS = 15_000L
+private const val PSM_READ_TIMEOUT_MS = 25_000L
+private const val PSM_LOG_TAG = "SPBluetoothSync"
 
 @SuppressLint("MissingPermission")
 class BluetoothPsmExchange(private val context: Context) {
@@ -134,10 +136,7 @@ class BluetoothPsmExchange(private val context: Context) {
                 val characteristic = gatt.getService(SYNC_SERVICE_UUID)
                     ?.getCharacteristic(PSM_CHARACTERISTIC_UUID)
                 if (characteristic == null) {
-                    if (!hasRefreshedCache) {
-                        hasRefreshedCache = true
-                        refreshGattCache(gatt)
-                        mainHandler.postDelayed({ gatt.discoverServices() }, 600)
+                    if (rediscoverWithFreshAttributes(gatt)) {
                         return
                     }
                     mainHandler.removeCallbacks(timeout)
@@ -152,23 +151,41 @@ class BluetoothPsmExchange(private val context: Context) {
                 gatt: BluetoothGatt,
                 characteristic: BluetoothGattCharacteristic,
                 status: Int,
-            ) = acceptPsm(characteristic.value, status)
+            ) = acceptPsm(gatt, characteristic.value, status)
 
             override fun onCharacteristicRead(
                 gatt: BluetoothGatt,
                 characteristic: BluetoothGattCharacteristic,
                 value: ByteArray,
                 status: Int,
-            ) = acceptPsm(value, status)
+            ) = acceptPsm(gatt, value, status)
 
-            private fun acceptPsm(value: ByteArray?, status: Int) {
-                mainHandler.removeCallbacks(timeout)
-                if (status != BluetoothGatt.GATT_SUCCESS || value == null || value.size < 2) {
-                    settle(null, "peer returned no usable PSM")
+            private fun acceptPsm(gatt: BluetoothGatt, value: ByteArray?, status: Int) {
+                if (status == BluetoothGatt.GATT_SUCCESS && value != null && value.size >= 2) {
+                    mainHandler.removeCallbacks(timeout)
+                    val psm = (value[0].toInt() and 0xFF) or ((value[1].toInt() and 0xFF) shl 8)
+                    settle(psm, null)
                     return
                 }
-                val psm = (value[0].toInt() and 0xFF) or ((value[1].toInt() and 0xFF) shl 8)
-                settle(psm, null)
+                Log.i(PSM_LOG_TAG, "PSM read failed status=$status bytes=${value?.size ?: -1}")
+                if (rediscoverWithFreshAttributes(gatt)) {
+                    return
+                }
+                mainHandler.removeCallbacks(timeout)
+                settle(
+                    null,
+                    "peer returned no usable PSM (status=$status bytes=${value?.size ?: -1})",
+                )
+            }
+
+            private fun rediscoverWithFreshAttributes(gatt: BluetoothGatt): Boolean {
+                if (hasRefreshedCache) {
+                    return false
+                }
+                hasRefreshedCache = true
+                refreshGattCache(gatt)
+                mainHandler.postDelayed({ gatt.discoverServices() }, 600)
+                return true
             }
         }
 
