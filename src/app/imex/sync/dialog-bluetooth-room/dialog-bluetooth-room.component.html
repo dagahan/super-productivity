@@ -38,10 +38,14 @@
         <li>
           <button
             mat-button
-            (click)="addDevice(device)"
+            [disabled]="invitingAddress() !== null"
+            (click)="inviteDevice(device)"
           >
             <mat-icon>add</mat-icon>
             {{ device.deviceName }}
+            @if (invitingAddress() === device.platformAddress) {
+              <mat-spinner diameter="16"></mat-spinner>
+            }
           </button>
         </li>
       }
