@@ -16,7 +16,7 @@ interface BluetoothSyncPlugin {
   closeLink(options: { linkId: string }): Promise<void>;
   startListening(): Promise<void>;
   stopListening(): Promise<void>;
-  readSharedFile(options: { filePath: string }): Promise<{ dataStr: string }>;
+  readSharedFile(options: { filePath: string }): Promise<{ dataStr: string | null }>;
   writeSharedFile(options: { filePath: string; dataStr: string }): Promise<void>;
   deleteSharedFile(options: { filePath: string }): Promise<void>;
   listSharedFiles(options: { dirPath: string }): Promise<{ filePaths: string[] }>;
@@ -123,8 +123,16 @@ class CapacitorBluetoothBridge implements BluetoothPlatformBridge {
   private subscription: Promise<void> | null = null;
 
   readonly sharedFileStore: FileAdapter = {
-    readFile: async (filePath) =>
-      (await BluetoothSyncBridge.readSharedFile({ filePath })).dataStr,
+    readFile: async (filePath) => {
+      // An absent file resolves rather than rejects: a rejected plugin call is
+      // logged as an error by the Capacitor bridge, and a peer asking for a file
+      // this device has never written is ordinary sync traffic, not a fault.
+      const { dataStr } = await BluetoothSyncBridge.readSharedFile({ filePath });
+      if (dataStr === null) {
+        throw new Error(`No shared file at ${filePath}`);
+      }
+      return dataStr;
+    },
     writeFile: async (filePath, dataStr) => {
       await BluetoothSyncBridge.writeSharedFile({ filePath, dataStr });
     },

@@ -346,10 +346,13 @@ class BluetoothSyncPlugin : Plugin() {
             call.reject("filePath is required")
             return
         }
+        val file = resolveInsideSharedStore(filePath)
+        if (!file.isFile) {
+            call.resolve(JSObject().put("dataStr", null))
+            return
+        }
         try {
-            call.resolve(
-                JSObject().put("dataStr", resolveInsideSharedStore(filePath).readText())
-            )
+            call.resolve(JSObject().put("dataStr", file.readText()))
         } catch (e: IOException) {
             call.reject(e.message ?: "Could not read the shared file")
         }
