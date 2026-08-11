@@ -241,19 +241,50 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
         let deviceName = (command["deviceName"] as? String) ?? ""
         let request = ConnectRequest(
             commandId: commandId, pairedAddress: addressText, deviceName: deviceName)
-        if let identifier = UUID(uuidString: addressText)
-            ?? peripheralIdentifiersByPairedAddress[addressText]
+        wakePairedDevice(request.pairedAddress) { [weak self] in
+            self?.dial(request)
+        }
+    }
+
+    private func dial(_ request: ConnectRequest) {
+        if let identifier = UUID(uuidString: request.pairedAddress)
+            ?? peripheralIdentifiersByPairedAddress[request.pairedAddress]
         {
             connectToKnownPeripheral(request, identifier: identifier)
             return
         }
-        guard !deviceName.isEmpty else {
+        guard !request.deviceName.isEmpty else {
             respondError(
-                id: commandId,
+                id: request.commandId,
                 message: "This member has no Bluetooth name for macOS to look for")
             return
         }
         searchForAdvertisedPeer(request)
+    }
+
+    private func wakePairedDevice(_ pairedAddress: String, then dial: @escaping () -> Void) {
+        guard let device = pairedDevice(matching: pairedAddress), !device.isConnected() else {
+            dial()
+            return
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            device.openConnection()
+            DispatchQueue.main.async(execute: dial)
+        }
+    }
+
+    private func pairedDevice(matching address: String) -> IOBluetoothDevice? {
+        guard UUID(uuidString: address) == nil,
+            let devices = IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]
+        else {
+            return nil
+        }
+        let wanted = comparableAddress(address)
+        return devices.first { comparableAddress($0.addressString ?? "") == wanted }
+    }
+
+    private func comparableAddress(_ address: String) -> String {
+        address.lowercased().filter(\.isHexDigit)
     }
 
     private func connectToKnownPeripheral(_ request: ConnectRequest, identifier: UUID) {

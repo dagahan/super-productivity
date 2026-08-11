@@ -116,6 +116,8 @@ class BluetoothPsmExchange(private val context: Context) {
         var hasSettled = false
         var openGatt: BluetoothGatt? = null
         var hasRefreshedCache = false
+        var hasWaitedForPeer = false
+        var waitForPeerToComeBack: (() -> Boolean)? = null
 
         val settle = { psm: Int?, failure: String? ->
             if (!hasSettled) {
@@ -134,6 +136,9 @@ class BluetoothPsmExchange(private val context: Context) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     gatt.discoverServices()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    if (waitForPeerToComeBack?.invoke() == true) {
+                        return
+                    }
                     mainHandler.removeCallbacks(timeout)
                     settle(null, "peer disconnected before returning a PSM")
                 }
@@ -196,8 +201,20 @@ class BluetoothPsmExchange(private val context: Context) {
             }
         }
 
+        waitForPeerToComeBack = {
+            if (hasSettled || hasWaitedForPeer) {
+                false
+            } else {
+                hasWaitedForPeer = true
+                openGatt?.close()
+                openGatt =
+                    device.connectGatt(context, true, callback, BluetoothDevice.TRANSPORT_LE)
+                openGatt != null
+            }
+        }
+
         openGatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        if (openGatt == null) {
+        if (openGatt == null && waitForPeerToComeBack?.invoke() != true) {
             mainHandler.removeCallbacks(timeout)
             settle(null, "could not open a GATT connection to the peer")
         }
