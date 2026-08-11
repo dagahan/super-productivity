@@ -149,3 +149,33 @@ describe('bluetooth room membership', () => {
     expect(findMemberByAddress(members, '00:00:00:00:00:00')).toBeUndefined();
   });
 });
+
+describe('addresses learned second-hand', () => {
+  it('does not adopt the address the introducing peer knows a member by', () => {
+    const result = mergeRoomMembers({
+      localDeviceId: 'laptop',
+      localMembers: [member('tablet', { isTrustedToInvite: true })],
+      peerDeviceId: 'tablet',
+      peerMembers: [
+        member('phone', { platformAddress: '674CF748-4FE4-8684-4EFF-69B31D8DA165' }),
+      ],
+    });
+
+    expect(result.members.find((m) => m.deviceId === 'phone')?.platformAddress).toBe('');
+  });
+
+  it('still learns who the member is, so it can be recognised later', () => {
+    const result = mergeRoomMembers({
+      localDeviceId: 'laptop',
+      localMembers: [member('tablet', { isTrustedToInvite: true })],
+      peerDeviceId: 'tablet',
+      peerMembers: [member('phone', { deviceName: 'Pixel 9' })],
+    });
+
+    expect(result.members.find((m) => m.deviceId === 'phone')).toMatchObject({
+      deviceId: 'phone',
+      deviceName: 'Pixel 9',
+      invitedByDeviceId: 'tablet',
+    });
+  });
+});

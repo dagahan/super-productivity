@@ -26,9 +26,15 @@ const createLink = (peerDeviceId: string): BluetoothLink => ({
   close: async () => undefined,
 });
 
+const asPairedDevice = (roomMember: BluetoothRoomMember): BluetoothPairedDevice => ({
+  platformAddress: roomMember.platformAddress,
+  deviceName: roomMember.deviceName,
+  isCurrentlyConnected: false,
+});
+
 const createConnector = ({
   members = [PIXEL, REDMI],
-  paired = [] as BluetoothPairedDevice[],
+  paired = members.map(asPairedDevice),
   unreachableAddresses = [] as string[],
 }: {
   members?: BluetoothRoomMember[];
@@ -79,6 +85,7 @@ describe('ReachableMemberConnector', () => {
   it('prefers a member the platform already has a live connection to', async () => {
     const { connector, dialledAddresses } = createConnector({
       paired: [
+        asPairedDevice(PIXEL),
         {
           platformAddress: REDMI.platformAddress,
           deviceName: REDMI.deviceName,
@@ -96,6 +103,7 @@ describe('ReachableMemberConnector', () => {
   it('matches the live connection whatever case the platform reports it in', async () => {
     const { connector, dialledAddresses } = createConnector({
       paired: [
+        asPairedDevice(PIXEL),
         {
           platformAddress: REDMI.platformAddress.toLowerCase(),
           deviceName: REDMI.deviceName,
@@ -119,6 +127,55 @@ describe('ReachableMemberConnector', () => {
     await session.close();
 
     expect(dialledAddresses).toEqual([REDMI.platformAddress]);
+  });
+
+  it('dials a member it only heard about by finding it in its own paired list', async () => {
+    const { connector, dialledAddresses } = createConnector({
+      members: [{ ...PIXEL, platformAddress: '' }],
+      paired: [
+        {
+          platformAddress: PIXEL.platformAddress,
+          deviceName: PIXEL.deviceName,
+          isCurrentlyConnected: false,
+        },
+      ],
+    });
+
+    const session = await connector.connectToAnyReachableMember();
+    await session.close();
+
+    expect(dialledAddresses).toEqual([PIXEL.platformAddress]);
+  });
+
+  it('replaces an address this platform cannot dial rather than handing it over', async () => {
+    const macOsIdentifier = '674CF748-4FE4-8684-4EFF-69B31D8DA165';
+    const { connector, dialledAddresses } = createConnector({
+      members: [{ ...PIXEL, platformAddress: macOsIdentifier }],
+      paired: [
+        {
+          platformAddress: PIXEL.platformAddress,
+          deviceName: PIXEL.deviceName,
+          isCurrentlyConnected: false,
+        },
+      ],
+    });
+
+    const session = await connector.connectToAnyReachableMember();
+    await session.close();
+
+    expect(dialledAddresses).toEqual([PIXEL.platformAddress]);
+  });
+
+  it('says a member is unpaired here instead of dialling an address it cannot use', async () => {
+    const { connector, dialledAddresses } = createConnector({
+      members: [{ ...PIXEL, platformAddress: '674CF748-4FE4-8684-4EFF-69B31D8DA165' }],
+      paired: [],
+    });
+
+    await expectAsync(connector.connectToAnyReachableMember()).toBeRejectedWithError(
+      /not paired with this device yet/,
+    );
+    expect(dialledAddresses).toEqual([]);
   });
 
   it('reports every reason when no member could be reached', async () => {

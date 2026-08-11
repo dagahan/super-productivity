@@ -7,7 +7,10 @@ import {
   type BluetoothRoomMember,
 } from '@sp/sync-providers/bluetooth';
 import type { SyncLogger } from '@sp/sync-core';
-import type { BluetoothPlatformBridge } from './bluetooth-platform.port';
+import type {
+  BluetoothPairedDevice,
+  BluetoothPlatformBridge,
+} from './bluetooth-platform.port';
 
 export interface ReachableMemberConnectorDeps {
   bridge: BluetoothPlatformBridge;
@@ -50,14 +53,17 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
       throw new NoRoomMemberReachableError('the room has no other devices');
     }
 
+    const paired = await this.deps.bridge.listPairedDevices();
     const failureReasons: string[] = [];
-    for (const member of await this.orderByLikelyReachable(members)) {
+    for (const member of this.orderByLikelyReachable(members, paired)) {
+      const address = this.dialableAddressOf(member, paired);
+      if (!address) {
+        failureReasons.push(`${member.deviceName} is not paired with this device yet`);
+        continue;
+      }
       try {
-        const session = await this.connectToDevice(member.platformAddress);
-        this.reachedAtByPeer.set(
-          normalizeDeviceAddress(member.platformAddress),
-          Date.now(),
-        );
+        const session = await this.connectToDevice(address);
+        this.reachedAtByPeer.set(normalizeDeviceAddress(address), Date.now());
         return session;
       } catch (error) {
         failureReasons.push(error instanceof Error ? error.message : String(error));
@@ -94,19 +100,48 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
     return null;
   }
 
-  private async orderByLikelyReachable(
+  /**
+   * A member carries the address whichever device last saw it, and the room may
+   * carry none at all for a member it only heard about second-hand. Only this
+   * device's own paired list can say how to reach it from here, so an address
+   * that is not in that list is replaced by the paired entry with the same name
+   * rather than handed to the platform, which may not even recognise it as an
+   * address.
+   */
+  private dialableAddressOf(
+    member: BluetoothRoomMember,
+    paired: BluetoothPairedDevice[],
+  ): string | null {
+    const isPaired = paired.some(
+      (device) =>
+        normalizeDeviceAddress(device.platformAddress) ===
+        normalizeDeviceAddress(member.platformAddress),
+    );
+    if (member.platformAddress && isPaired) {
+      return member.platformAddress;
+    }
+    const namedTheSame = paired.find((device) => device.deviceName === member.deviceName);
+    return namedTheSame?.platformAddress ?? null;
+  }
+
+  private orderByLikelyReachable(
     members: BluetoothRoomMember[],
-  ): Promise<BluetoothRoomMember[]> {
-    const paired = await this.deps.bridge.listPairedDevices();
+    paired: BluetoothPairedDevice[],
+  ): BluetoothRoomMember[] {
     const connectedAddresses = new Set(
       paired
         .filter((device) => device.isCurrentlyConnected)
         .map((device) => normalizeDeviceAddress(device.platformAddress)),
     );
+    // Ordered by the address this device would actually dial, which is not
+    // always the one the member carries -- otherwise a member reached under a
+    // resolved address never looks recently reached and takes every turn.
+    const dialledAs = (member: BluetoothRoomMember): string =>
+      normalizeDeviceAddress(this.dialableAddressOf(member, paired) ?? '');
     const isConnected = (member: BluetoothRoomMember): number =>
-      Number(connectedAddresses.has(normalizeDeviceAddress(member.platformAddress)));
+      Number(connectedAddresses.has(dialledAs(member)));
     const reachedAt = (member: BluetoothRoomMember): number =>
-      this.reachedAtByPeer.get(normalizeDeviceAddress(member.platformAddress)) ?? 0;
+      this.reachedAtByPeer.get(dialledAs(member)) ?? 0;
 
     return [...members].sort(
       (left, right) =>

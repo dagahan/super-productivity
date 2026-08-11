@@ -216,7 +216,12 @@ class BluetoothSyncPlugin : Plugin() {
             return
         }
 
-        val device = adapter.getRemoteDevice(platformAddress)
+        val device = try {
+            adapter.getRemoteDevice(platformAddress)
+        } catch (e: IllegalArgumentException) {
+            call.reject("$platformAddress is not an address this device can dial")
+            return
+        }
         call.setKeepAlive(true)
         psmExchange.readPeerPsm(
             device,
