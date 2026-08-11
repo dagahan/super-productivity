@@ -198,3 +198,23 @@ describe('bluetooth membership across macOS identifier namespaces', () => {
     expect(response.isOk).toBe(false);
   });
 });
+
+describe('the device whose invitation was accepted', () => {
+  it('may introduce the rest of the room, so a third device is reachable', async () => {
+    const { handle, readMembers } = createResponder();
+
+    await handle({
+      id: '1',
+      method: 'invite',
+      protocolVersion: BLUETOOTH_PROTOCOL_VERSION,
+      roomId: 'room-1',
+      inviterDeviceId: 'sp-laptop',
+      inviterDeviceName: 'Laptop',
+    });
+
+    expect(readMembers()[0]).toMatchObject({
+      deviceId: 'sp-laptop',
+      isTrustedToInvite: true,
+    });
+  });
+});

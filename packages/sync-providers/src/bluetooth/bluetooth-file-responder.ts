@@ -160,7 +160,7 @@ export class BluetoothFileResponder {
           deviceId: request.inviterDeviceId,
           deviceName: request.inviterDeviceName,
           platformAddress: peerAddress,
-          isTrustedToInvite: outcome.isTrustedToInvite,
+          isTrustedToInvite: true,
           invitedByDeviceId: null,
         },
       ]);
