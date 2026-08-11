@@ -546,6 +546,7 @@ export class FileBasedSyncAdapterService {
     return {
       supportsOperationSync: true,
       providerMode: 'fileSnapshotOps',
+      isConcurrentSnapshotMergeSafe: provider.isConcurrentSnapshotMergeSafe,
 
       uploadOps: async (
         ops: SyncOperation[],
@@ -3292,13 +3293,6 @@ export class FileBasedSyncAdapterService {
     return { data, rev: response.rev };
   }
 
-  /**
-   * Gets a unique key for a provider's current remote (for storing per-target
-   * state). Providers serving several remotes behind one id — a Bluetooth room
-   * replicates the sync file on every member — namespace themselves further via
-   * `resolveSyncTargetKey`, so each remote keeps its own sync version, vector
-   * clock, rev and seq cursor instead of overwriting one another's.
-   */
   private async _getProviderKey(
     provider: FileSyncProvider<SyncProviderId>,
   ): Promise<string> {

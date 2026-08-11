@@ -921,11 +921,6 @@ describe('FileBasedSyncAdapterService', () => {
   });
 
   describe('providers serving more than one remote', () => {
-    // A Bluetooth room replicates the sync file on every member, so one provider
-    // id fronts several remotes, each with its own rev lineage and its own
-    // cursor. Keyed by provider id alone, one member's cursor would be handed to
-    // the next: a peer that is actually behind looks caught up and its ops are
-    // never downloaded.
     let currentTargetKey: string;
 
     beforeEach(() => {
@@ -950,6 +945,22 @@ describe('FileBasedSyncAdapterService', () => {
       currentTargetKey = 'peer-pixel';
 
       expect(await adapter.getLastServerSeq()).toBe(42);
+    });
+
+    it('lets a provider whose remotes are the user own devices merge concurrent snapshots', () => {
+      (
+        mockProvider as { isConcurrentSnapshotMergeSafe?: boolean }
+      ).isConcurrentSnapshotMergeSafe = true;
+
+      adapter = service.createAdapter(mockProvider, mockCfg, mockEncryptKey);
+
+      expect(adapter.isConcurrentSnapshotMergeSafe).toBe(true);
+    });
+
+    it('leaves a single-remote provider on the shared default', () => {
+      adapter = service.createAdapter(mockProvider, mockCfg, mockEncryptKey);
+
+      expect(adapter.isConcurrentSnapshotMergeSafe).toBeUndefined();
     });
 
     it('leaves single-remote providers keyed by provider id alone', async () => {

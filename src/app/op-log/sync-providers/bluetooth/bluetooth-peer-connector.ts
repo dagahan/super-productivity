@@ -100,14 +100,6 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
     return null;
   }
 
-  /**
-   * A member carries the address whichever device last saw it, and the room may
-   * carry none at all for a member it only heard about second-hand. Only this
-   * device's own paired list can say how to reach it from here, so an address
-   * that is not in that list is replaced by the paired entry with the same name
-   * rather than handed to the platform, which may not even recognise it as an
-   * address.
-   */
   private dialableAddressOf(
     member: BluetoothRoomMember,
     paired: BluetoothPairedDevice[],
@@ -133,9 +125,6 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
         .filter((device) => device.isCurrentlyConnected)
         .map((device) => normalizeDeviceAddress(device.platformAddress)),
     );
-    // Ordered by the address this device would actually dial, which is not
-    // always the one the member carries -- otherwise a member reached under a
-    // resolved address never looks recently reached and takes every turn.
     const dialledAs = (member: BluetoothRoomMember): string =>
       normalizeDeviceAddress(this.dialableAddressOf(member, paired) ?? '');
     const isConnected = (member: BluetoothRoomMember): number =>

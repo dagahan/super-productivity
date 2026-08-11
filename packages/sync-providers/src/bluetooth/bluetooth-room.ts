@@ -59,14 +59,6 @@ export const mergeRoomMembers = ({
     members.push({
       deviceId: candidate.deviceId,
       deviceName: candidate.deviceName,
-      // Deliberately not the address the peer knows this member by. An address
-      // is what one device observed, not a property of the member: macOS hands
-      // out a CoreBluetooth identifier that is unique per host and per role,
-      // while everyone else uses the classic MAC. Copying it across gives a
-      // device an address it can never dial -- and asking Android to dial a
-      // macOS identifier crashes the Bluetooth stack outright. Each device
-      // learns the address itself, by matching a paired device or by noting
-      // where this member turns up when it dials in.
       platformAddress: '',
       isTrustedToInvite: false,
       invitedByDeviceId: peerDeviceId,

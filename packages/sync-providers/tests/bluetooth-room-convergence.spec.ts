@@ -153,11 +153,6 @@ const createRoom = (): { devices: Record<DeviceId, Device> } => {
   };
 };
 
-/**
- * One sync cycle as the adapter drives it: read the peer, merge, then write the
- * union back under the revision the read returned. Returns the ops both sides
- * end up holding.
- */
 const syncOnce = async (device: Device, peer: Device): Promise<string[]> => {
   await device.meet(peer);
   let peerOps: string[] = [];

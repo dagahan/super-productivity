@@ -783,7 +783,8 @@ export class OperationLogSyncService {
           const gate = this._classifySnapshotConflict(
             localClock,
             result.snapshotVectorClock,
-            FILE_BASED_SYNC_CONSTANTS.AUTO_MERGE_CONCURRENT_SNAPSHOT,
+            syncProvider.isConcurrentSnapshotMergeSafe ??
+              FILE_BASED_SYNC_CONSTANTS.AUTO_MERGE_CONCURRENT_SNAPSHOT,
           );
 
           if (gate === 'keep-local') {
