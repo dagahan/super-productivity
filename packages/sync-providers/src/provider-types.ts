@@ -52,6 +52,24 @@ export interface FileSyncProvider<
 > extends SyncProviderBase<PID, TPrivateCfg> {
   isLimitedToSingleFileSync?: boolean;
 
+  /**
+   * Distinguishes the remote replica this provider currently reads and writes,
+   * for providers that serve more than one behind a single provider id. The
+   * adapter's per-target bookkeeping — sync version, vector clock, last-seen
+   * rev, and the download cursor — is namespaced by provider id alone, which
+   * holds only while a provider id means exactly one remote. A Bluetooth room
+   * has one replica per member, each with its own rev lineage and its own
+   * sequence cursor, so carrying one peer's rev into a conversation with
+   * another makes every conditional write fail and sync stall. Returning a key
+   * per peer gives each relationship its own instance of the single-remote
+   * algorithm. Resolve it before the cycle reads the cursor: a key that changes
+   * mid-cycle reads one peer's cursor and commits it under another's.
+   *
+   * Providers backed by exactly one remote (Dropbox, WebDAV, local files) leave
+   * this unset and stay keyed by provider id.
+   */
+  resolveSyncTargetKey?(): Promise<string>;
+
   getFileRev(targetPath: string, localRev: string | null): Promise<FileRevResponse>;
   downloadFile(targetPath: string): Promise<FileDownloadResponse>;
   /**

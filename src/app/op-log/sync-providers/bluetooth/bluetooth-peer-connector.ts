@@ -18,6 +18,7 @@ export interface ReachableMemberConnectorDeps {
 
 export class ReachableMemberConnector implements BluetoothPeerConnector {
   private readonly sessionsByPeer = new Map<string, BluetoothPeerSession>();
+  private readonly reachedAtByPeer = new Map<string, number>();
 
   constructor(private readonly deps: ReachableMemberConnectorDeps) {}
 
@@ -52,7 +53,12 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
     const failureReasons: string[] = [];
     for (const member of await this.orderByLikelyReachable(members)) {
       try {
-        return await this.connectToDevice(member.platformAddress);
+        const session = await this.connectToDevice(member.platformAddress);
+        this.reachedAtByPeer.set(
+          normalizeDeviceAddress(member.platformAddress),
+          Date.now(),
+        );
+        return session;
       } catch (error) {
         failureReasons.push(error instanceof Error ? error.message : String(error));
       }
@@ -95,12 +101,16 @@ export class ReachableMemberConnector implements BluetoothPeerConnector {
     const connectedAddresses = new Set(
       paired
         .filter((device) => device.isCurrentlyConnected)
-        .map((device) => device.platformAddress),
+        .map((device) => normalizeDeviceAddress(device.platformAddress)),
     );
+    const isConnected = (member: BluetoothRoomMember): number =>
+      Number(connectedAddresses.has(normalizeDeviceAddress(member.platformAddress)));
+    const reachedAt = (member: BluetoothRoomMember): number =>
+      this.reachedAtByPeer.get(normalizeDeviceAddress(member.platformAddress)) ?? 0;
+
     return [...members].sort(
       (left, right) =>
-        Number(connectedAddresses.has(right.platformAddress)) -
-        Number(connectedAddresses.has(left.platformAddress)),
+        reachedAt(left) - reachedAt(right) || isConnected(right) - isConnected(left),
     );
   }
 }

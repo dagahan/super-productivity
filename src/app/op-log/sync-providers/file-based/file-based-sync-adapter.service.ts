@@ -543,8 +543,6 @@ export class FileBasedSyncAdapterService {
     // Load persisted state before creating adapter
     this._loadPersistedState();
 
-    const providerKey = this._getProviderKey(provider);
-
     return {
       supportsOperationSync: true,
       providerMode: 'fileSnapshotOps',
@@ -583,10 +581,11 @@ export class FileBasedSyncAdapterService {
 
       getLastServerSeq: async (): Promise<number> => {
         this._loadPersistedState();
-        return this._localSeqCounters.get(providerKey) || 0;
+        return this._localSeqCounters.get(await this._getProviderKey(provider)) || 0;
       },
 
       setLastServerSeq: async (seq: number): Promise<void> => {
+        const providerKey = await this._getProviderKey(provider);
         this._localSeqCounters.set(providerKey, seq);
         const pendingExpectedVersion = this._pendingExpectedSyncVersions.get(providerKey);
         if (pendingExpectedVersion !== undefined) {
@@ -889,7 +888,7 @@ export class FileBasedSyncAdapterService {
     // aborts before any write instead of committing this target's merged data to
     // the next one. (Task 2.)
     const provider = this._withTargetGuard(rawProvider, this._targetGeneration);
-    const providerKey = this._getProviderKey(provider);
+    const providerKey = await this._getProviderKey(provider);
 
     // SPAP-11: split-file ("Surgical sync") path is fully separate and only
     // reached when the opt-in setting is ON. The single-file path below is
@@ -1016,7 +1015,7 @@ export class FileBasedSyncAdapterService {
     // new one. Reads (downloadFile/getFileRev) pass through unaffected. (Task 2.)
     const capturedGeneration = this._targetGeneration;
     const provider = this._withTargetGuard(rawProvider, capturedGeneration);
-    const providerKey = this._getProviderKey(provider);
+    const providerKey = await this._getProviderKey(provider);
 
     // SPAP-11: split-file ("Surgical sync") download path (opt-in). When OFF
     // (default) the single-file path below runs unchanged.
@@ -1388,7 +1387,7 @@ export class FileBasedSyncAdapterService {
     // switch aborts before any write instead of committing this target's
     // snapshot to the next one. (Task 2.)
     const provider = this._withTargetGuard(rawProvider, this._targetGeneration);
-    const providerKey = this._getProviderKey(provider);
+    const providerKey = await this._getProviderKey(provider);
 
     OpLog.normal(`FileBasedSyncAdapter: Uploading snapshot (reason=${reason})`);
 
@@ -1512,7 +1511,7 @@ export class FileBasedSyncAdapterService {
   private async _deleteAllData(
     provider: FileSyncProvider<SyncProviderId>,
   ): Promise<{ success: boolean }> {
-    const providerKey = this._getProviderKey(provider);
+    const providerKey = await this._getProviderKey(provider);
 
     OpLog.normal('FileBasedSyncAdapter: Deleting all sync data');
 
@@ -3294,10 +3293,17 @@ export class FileBasedSyncAdapterService {
   }
 
   /**
-   * Gets a unique key for a provider (for storing per-provider state).
+   * Gets a unique key for a provider's current remote (for storing per-target
+   * state). Providers serving several remotes behind one id — a Bluetooth room
+   * replicates the sync file on every member — namespace themselves further via
+   * `resolveSyncTargetKey`, so each remote keeps its own sync version, vector
+   * clock, rev and seq cursor instead of overwriting one another's.
    */
-  private _getProviderKey(provider: FileSyncProvider<SyncProviderId>): string {
-    return `${provider.id}`;
+  private async _getProviderKey(
+    provider: FileSyncProvider<SyncProviderId>,
+  ): Promise<string> {
+    const targetKey = await provider.resolveSyncTargetKey?.();
+    return targetKey ? `${provider.id}::${targetKey}` : `${provider.id}`;
   }
 
   /**

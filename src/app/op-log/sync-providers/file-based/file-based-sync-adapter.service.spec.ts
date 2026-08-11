@@ -920,6 +920,48 @@ describe('FileBasedSyncAdapterService', () => {
     });
   });
 
+  describe('providers serving more than one remote', () => {
+    // A Bluetooth room replicates the sync file on every member, so one provider
+    // id fronts several remotes, each with its own rev lineage and its own
+    // cursor. Keyed by provider id alone, one member's cursor would be handed to
+    // the next: a peer that is actually behind looks caught up and its ops are
+    // never downloaded.
+    let currentTargetKey: string;
+
+    beforeEach(() => {
+      currentTargetKey = 'peer-pixel';
+      mockProvider.resolveSyncTargetKey = async () => currentTargetKey;
+      adapter = service.createAdapter(mockProvider, mockCfg, mockEncryptKey);
+    });
+
+    it('keeps a separate download cursor per remote', async () => {
+      await adapter.setLastServerSeq(42);
+
+      currentTargetKey = 'peer-redmi';
+
+      expect(await adapter.getLastServerSeq()).toBe(0);
+    });
+
+    it('returns each remote its own cursor when the peer comes back around', async () => {
+      await adapter.setLastServerSeq(42);
+      currentTargetKey = 'peer-redmi';
+      await adapter.setLastServerSeq(7);
+
+      currentTargetKey = 'peer-pixel';
+
+      expect(await adapter.getLastServerSeq()).toBe(42);
+    });
+
+    it('leaves single-remote providers keyed by provider id alone', async () => {
+      delete mockProvider.resolveSyncTargetKey;
+      adapter = service.createAdapter(mockProvider, mockCfg, mockEncryptKey);
+
+      await adapter.setLastServerSeq(42);
+
+      expect(await adapter.getLastServerSeq()).toBe(42);
+    });
+  });
+
   describe('uploadSnapshot', () => {
     it('should create new sync file from the state captured by the upload boundary', async () => {
       mockProvider.downloadFile.and.throwError(

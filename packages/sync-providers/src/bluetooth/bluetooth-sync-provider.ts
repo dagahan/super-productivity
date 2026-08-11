@@ -21,7 +21,11 @@ import {
 } from './bluetooth-message';
 import { BluetoothPeerError, type BluetoothPeerSession } from './bluetooth-peer-session';
 import { mergeRoomMembers } from './bluetooth-room';
-import { PROVIDER_ID_BLUETOOTH, type BluetoothSyncPrivateCfg } from './bluetooth.model';
+import {
+  PROVIDER_ID_BLUETOOTH,
+  type BluetoothRoomMember,
+  type BluetoothSyncPrivateCfg,
+} from './bluetooth.model';
 
 export interface BluetoothPeerConnector {
   isAvailable(): Promise<boolean>;
@@ -49,7 +53,17 @@ export interface BluetoothSyncProviderDeps {
   // device that only wrote to its peer would read its own past uploads forever
   // and never see the peer's operations.
   localReplica: FileAdapter;
+  /**
+   * How long a peer stays pinned after its last request. A sync cycle issues its
+   * requests back to back, so any gap this long means the cycle ended and the
+   * next one is free to visit a different member. Releasing on idle rather than
+   * on a cycle-completion callback keeps the rotation decision inside the
+   * transport, where an unused Bluetooth link is worth dropping anyway.
+   */
+  peerPinIdleMs?: number;
 }
+
+export const DEFAULT_PEER_PIN_IDLE_MS = 45_000;
 
 export class BluetoothSyncProvider implements FileSyncProvider<
   typeof PROVIDER_ID_BLUETOOTH,
@@ -65,9 +79,23 @@ export class BluetoothSyncProvider implements FileSyncProvider<
   >;
 
   private activeSession: BluetoothPeerSession | null = null;
+  private pinnedPeerDeviceId: string | null = null;
+  private pinnedAt = 0;
+  private readonly peerPinIdleMs: number;
 
   constructor(private readonly deps: BluetoothSyncProviderDeps) {
     this.privateCfg = deps.credentialStore;
+    this.peerPinIdleMs = deps.peerPinIdleMs ?? DEFAULT_PEER_PIN_IDLE_MS;
+  }
+
+  /**
+   * Every member holds its own replica, so the adapter's rev lineage and
+   * download cursor are per peer rather than per provider. Resolving this opens
+   * the session, which is what decides who this cycle talks to.
+   */
+  async resolveSyncTargetKey(): Promise<string> {
+    await this.openSession();
+    return this.pinnedPeerDeviceId as string;
   }
 
   async isReady(): Promise<boolean> {
@@ -178,7 +206,7 @@ export class BluetoothSyncProvider implements FileSyncProvider<
 
   async disconnect(): Promise<void> {
     const session = this.activeSession;
-    this.activeSession = null;
+    this.releasePeer();
     await session?.close();
   }
 
@@ -189,24 +217,77 @@ export class BluetoothSyncProvider implements FileSyncProvider<
   ): Promise<TResult> {
     const session = await this.openSession();
     try {
-      return (await session.send(buildRequest(session))) as TResult;
+      const result = (await session.send(buildRequest(session))) as TResult;
+      this.pinnedAt = Date.now();
+      return result;
     } catch (error) {
       this.activeSession = null;
       throw translatePeerError(error);
     }
   }
 
-  private async openSession(): Promise<BluetoothPeerSession> {
-    if (this.activeSession?.isOpen) {
-      return this.activeSession;
-    }
+  private releasePeer(): void {
     this.activeSession = null;
+    this.pinnedPeerDeviceId = null;
+    this.pinnedAt = 0;
+  }
+
+  /**
+   * A pin is only worth giving up when another member is waiting for a turn.
+   * Holding the link in a two-device room spares it an L2CAP reconnect per
+   * cycle, which is the expensive part of a Bluetooth sync.
+   */
+  private shouldHandOverToAnotherMember(members: BluetoothRoomMember[]): boolean {
+    return (
+      this.pinnedPeerDeviceId !== null &&
+      members.length > 1 &&
+      Date.now() - this.pinnedAt >= this.peerPinIdleMs
+    );
+  }
+
+  /**
+   * A cycle's download, merge and upload must all address one member: an upload
+   * carries the `revToMatch` its download read, and that revision only means
+   * anything on the replica it came from. So a session dropped mid-cycle is
+   * re-dialled to the same peer, and only an idle pin is free to move on.
+   */
+  private async reconnectToPinnedPeer(
+    members: BluetoothRoomMember[],
+  ): Promise<BluetoothPeerSession | null> {
+    const pinnedMember = members.find(
+      (member) => member.deviceId === this.pinnedPeerDeviceId,
+    );
+    if (!pinnedMember) {
+      return null;
+    }
+    try {
+      return await this.deps.connector.connectToDevice(pinnedMember.platformAddress);
+    } catch (error) {
+      this.deps.logger.normal('BluetoothSyncProvider lost its pinned peer', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+      return null;
+    }
+  }
+
+  private async openSession(): Promise<BluetoothPeerSession> {
     const cfg = await this.privateCfg.load();
     if (!cfg?.localDeviceId) {
       throw new InvalidDataSPError('Bluetooth sync has no local device id');
     }
     const localMembers = cfg.members ?? [];
-    const session = await this.deps.connector.connectToAnyReachableMember();
+    if (this.shouldHandOverToAnotherMember(localMembers)) {
+      const idleSession = this.activeSession;
+      this.releasePeer();
+      await idleSession?.close().catch(() => undefined);
+    }
+    if (this.activeSession?.isOpen) {
+      return this.activeSession;
+    }
+    this.activeSession = null;
+    const session =
+      (await this.reconnectToPinnedPeer(localMembers)) ??
+      (await this.deps.connector.connectToAnyReachableMember());
     const hello = (await session.send({
       id: session.createRequestId(),
       method: 'hello',
@@ -230,6 +311,8 @@ export class BluetoothSyncProvider implements FileSyncProvider<
       learnedMemberCount: merged.addedDeviceIds.length,
     });
     this.activeSession = session;
+    this.pinnedPeerDeviceId = hello.deviceId;
+    this.pinnedAt = Date.now();
     return session;
   }
 }
