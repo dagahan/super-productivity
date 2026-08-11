@@ -18,6 +18,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
 import com.getcapacitor.annotation.PermissionCallback
+import com.superproductivity.superproductivity.service.BluetoothSyncNotificationHelper
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -149,6 +150,28 @@ class BluetoothSyncPlugin : Plugin() {
                 isSupported && adapter?.isEnabled == true && hasBluetoothPermissions()
             )
         )
+    }
+
+    @PluginMethod
+    fun showSyncProgress(call: PluginCall) {
+        BluetoothSyncNotificationHelper.showProgress(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun hideSyncProgress(call: PluginCall) {
+        BluetoothSyncNotificationHelper.hideProgress(context)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun showSyncFailure(call: PluginCall) {
+        val reason = call.getString("reason")
+        BluetoothSyncNotificationHelper.showFailure(
+            context,
+            if (reason.isNullOrBlank()) "Your devices could not finish syncing." else reason,
+        )
+        call.resolve()
     }
 
     @PluginMethod
