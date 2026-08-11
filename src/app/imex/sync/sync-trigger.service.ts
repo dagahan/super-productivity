@@ -254,6 +254,12 @@ export class SyncTriggerService {
           androidInterface.onResume$.pipe(throttleTime(10000), mapTo('I_RESUME_APP')),
           androidInterface.onPause$.pipe(throttleTime(10000), mapTo('I_PAUSE_APP')),
           this._isOnlineTrigger$,
+          // A phone left open in the foreground had no periodic trigger at all,
+          // so its own changes were never published for peers to read until the
+          // user pressed sync. Desktop has always polled on this interval.
+          ...(useIntervalTimer
+            ? [timer(syncInterval, syncInterval).pipe(mapTo('I_INTERVAL_TIMER'))]
+            : []),
         )
       : // EVERYTHING ELSE
         merge(
