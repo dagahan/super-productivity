@@ -163,3 +163,38 @@ describe('bluetooth invitation gate', () => {
     expect(response.isOk).toBe(false);
   });
 });
+
+describe('bluetooth membership across macOS identifier namespaces', () => {
+  const MEMBER_SEEN_EARLIER = {
+    deviceId: 'sp-pixel',
+    deviceName: 'Pixel 9',
+    platformAddress: 'BBDD4EE5-5CEE-1A34-3299-212E8FA87FCA',
+    isTrustedToInvite: true,
+    invitedByDeviceId: null,
+  };
+
+  const helloFrom = (deviceId: string): Parameters<BluetoothRequestHandler>[0] => ({
+    id: '9',
+    method: 'hello',
+    protocolVersion: BLUETOOTH_PROTOCOL_VERSION,
+    deviceId,
+    members: [],
+  });
+
+  it('recognises a member that dials in under a different platform address', async () => {
+    const { handle, readMembers } = createResponder({ members: [MEMBER_SEEN_EARLIER] });
+
+    const response = await handle(helloFrom('sp-pixel'));
+
+    expect(response.isOk).toBe(true);
+    expect(readMembers()[0].platformAddress).toBe(INVITER_ADDRESS);
+  });
+
+  it('still rejects a device that is not a member under any address', async () => {
+    const { handle } = createResponder({ members: [MEMBER_SEEN_EARLIER] });
+
+    const response = await handle(helloFrom('sp-stranger'));
+
+    expect(response.isOk).toBe(false);
+  });
+});

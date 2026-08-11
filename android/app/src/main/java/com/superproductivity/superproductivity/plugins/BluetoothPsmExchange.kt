@@ -41,7 +41,7 @@ class BluetoothPsmExchange(private val context: Context) {
         val psmCharacteristic = BluetoothGattCharacteristic(
             PSM_CHARACTERISTIC_UUID,
             BluetoothGattCharacteristic.PROPERTY_READ,
-            BluetoothGattCharacteristic.PERMISSION_READ_ENCRYPTED,
+            BluetoothGattCharacteristic.PERMISSION_READ,
         )
         val service = BluetoothGattService(
             SYNC_SERVICE_UUID, BluetoothGattService.SERVICE_TYPE_PRIMARY

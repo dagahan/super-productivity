@@ -8,6 +8,7 @@ let advertisedLocalName = "SuperProductivitySync"
 let streamChunkBytes = 65536
 let powerOnDeadlineSeconds = 5.0
 let peerSearchSeconds = 15.0
+let connectSeconds = 20.0
 
 func writeLine(_ payload: [String: Any]) {
     guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
@@ -106,16 +107,25 @@ final class LinkChannel: NSObject, StreamDelegate {
     }
 }
 
-final class PeerSearch {
+struct ConnectRequest {
     let commandId: Int
     let pairedAddress: String
     let deviceName: String
+    var hasSearchedAgain = false
+
+    func searchingAgain() -> ConnectRequest {
+        ConnectRequest(
+            commandId: commandId, pairedAddress: pairedAddress, deviceName: deviceName,
+            hasSearchedAgain: true)
+    }
+}
+
+final class PeerSearch {
+    let request: ConnectRequest
     var namesSeen: Set<String> = []
 
-    init(commandId: Int, pairedAddress: String, deviceName: String) {
-        self.commandId = commandId
-        self.pairedAddress = pairedAddress
-        self.deviceName = deviceName
+    init(request: ConnectRequest) {
+        self.request = request
     }
 }
 
@@ -132,7 +142,7 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
     private var startListeningCommandId: Int?
     private var commandsAwaitingPowerOn: [[String: Any]] = []
     private var hasScheduledPowerOnDeadline = false
-    private var pendingConnectByPeripheralId: [UUID: Int] = [:]
+    private var pendingConnectByPeripheralId: [UUID: ConnectRequest] = [:]
     private var connectingPeripherals: [UUID: CBPeripheral] = [:]
     private var peerSearches: [PeerSearch] = []
     private var peripheralIdentifiersByPairedAddress: [String: UUID] = [:]
@@ -219,7 +229,7 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
             return
         }
         startListeningCommandId = commandId
-        peripheralManager.publishL2CAPChannel(withEncryption: true)
+        peripheralManager.publishL2CAPChannel(withEncryption: false)
     }
 
     private func connect(commandId: Int, command: [String: Any]) {
@@ -228,60 +238,85 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
             respondError(id: commandId, message: "Malformed connect command")
             return
         }
+        let deviceName = (command["deviceName"] as? String) ?? ""
+        let request = ConnectRequest(
+            commandId: commandId, pairedAddress: addressText, deviceName: deviceName)
         if let identifier = UUID(uuidString: addressText)
             ?? peripheralIdentifiersByPairedAddress[addressText]
         {
-            connectToKnownPeripheral(commandId: commandId, identifier: identifier)
+            connectToKnownPeripheral(request, identifier: identifier)
             return
         }
-        guard let deviceName = command["deviceName"] as? String, !deviceName.isEmpty else {
+        guard !deviceName.isEmpty else {
             respondError(
                 id: commandId,
                 message: "This member has no Bluetooth name for macOS to look for")
             return
         }
-        searchForAdvertisedPeer(
-            commandId: commandId, pairedAddress: addressText, deviceName: deviceName)
+        searchForAdvertisedPeer(request)
     }
 
-    private func connectToKnownPeripheral(commandId: Int, identifier: UUID) {
+    private func connectToKnownPeripheral(_ request: ConnectRequest, identifier: UUID) {
         guard let peripheral = centralManager.retrievePeripherals(withIdentifiers: [identifier])
             .first
         else {
-            respondError(id: commandId, message: "CoreBluetooth does not know this peer")
+            forgetResolvedIdentifier(for: request)
+            retryOrFail(request, message: "CoreBluetooth does not know this peer")
             return
         }
-        beginConnect(commandId: commandId, peripheral: peripheral)
+        beginConnect(request, peripheral: peripheral)
     }
 
-    private func beginConnect(commandId: Int, peripheral: CBPeripheral) {
+    private func beginConnect(_ request: ConnectRequest, peripheral: CBPeripheral) {
         peripheral.delegate = self
         connectingPeripherals[peripheral.identifier] = peripheral
-        pendingConnectByPeripheralId[peripheral.identifier] = commandId
+        pendingConnectByPeripheralId[peripheral.identifier] = request
         centralManager.connect(peripheral, options: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + connectSeconds) { [weak self] in
+            guard let self,
+                self.pendingConnectByPeripheralId[peripheral.identifier]?.commandId
+                    == request.commandId
+            else { return }
+            self.centralManager.cancelPeripheralConnection(peripheral)
+            self.failConnect(
+                peripheral,
+                message:
+                    "pairing with \(request.deviceName.isEmpty ? "the peer" : request.deviceName) never completed -- forget it in Bluetooth settings on BOTH devices, then pair again from the phone"
+            )
+        }
     }
 
-    private func searchForAdvertisedPeer(
-        commandId: Int, pairedAddress: String, deviceName: String
-    ) {
-        guard centralManager.state == .poweredOn else {
-            respondError(id: commandId, message: "Bluetooth is not powered on")
+    private func forgetResolvedIdentifier(for request: ConnectRequest) {
+        peripheralIdentifiersByPairedAddress.removeValue(forKey: request.pairedAddress)
+    }
+
+    private func retryOrFail(_ request: ConnectRequest, message: String) {
+        guard !request.hasSearchedAgain, !request.deviceName.isEmpty,
+            UUID(uuidString: request.pairedAddress) == nil
+        else {
+            respondError(id: request.commandId, message: message)
             return
         }
-        peerSearches.append(
-            PeerSearch(commandId: commandId, pairedAddress: pairedAddress, deviceName: deviceName))
+        searchForAdvertisedPeer(request.searchingAgain())
+    }
+
+    private func searchForAdvertisedPeer(_ request: ConnectRequest) {
+        guard centralManager.state == .poweredOn else {
+            respondError(id: request.commandId, message: "Bluetooth is not powered on")
+            return
+        }
+        peerSearches.append(PeerSearch(request: request))
         centralManager.scanForPeripherals(
             withServices: [syncServiceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
         DispatchQueue.main.asyncAfter(deadline: .now() + peerSearchSeconds) { [weak self] in
-            self?.abandonPeerSearch(commandId: commandId)
+            self?.abandonPeerSearch(commandId: request.commandId)
         }
     }
 
     private func abandonPeerSearch(commandId: Int) {
-        guard let index = peerSearches.firstIndex(where: { $0.commandId == commandId }) else {
-            return
-        }
+        guard let index = peerSearches.firstIndex(where: { $0.request.commandId == commandId })
+        else { return }
         let search = peerSearches.remove(at: index)
         stopScanningWhenNothingIsWanted()
         let alsoSaw =
@@ -290,7 +325,9 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
             : "nearby devices advertising it: \(search.namesSeen.sorted().joined(separator: ", "))"
         respondError(
             id: commandId,
-            message: "\(search.deviceName) is not offering Super Productivity sync -- \(alsoSaw)")
+            message:
+                "\(search.request.deviceName) is not offering Super Productivity sync -- \(alsoSaw)"
+        )
     }
 
     private func stopScanningWhenNothingIsWanted() {
@@ -322,7 +359,9 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
             search.namesSeen.insert(name)
         }
         guard
-            let index = peerSearches.firstIndex(where: { isSameDeviceName($0.deviceName, name) })
+            let index = peerSearches.firstIndex(where: {
+                isSameDeviceName($0.request.deviceName, name)
+            })
         else {
             peripheralsBeingNamed.removeValue(forKey: peripheral.identifier)
             peripheralsRuledOut.insert(peripheral.identifier)
@@ -331,10 +370,10 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
         }
         let search = peerSearches.remove(at: index)
         peripheralsBeingNamed.removeValue(forKey: peripheral.identifier)
-        peripheralIdentifiersByPairedAddress[search.pairedAddress] = peripheral.identifier
+        peripheralIdentifiersByPairedAddress[search.request.pairedAddress] = peripheral.identifier
         stopScanningWhenNothingIsWanted()
         connectingPeripherals[peripheral.identifier] = peripheral
-        pendingConnectByPeripheralId[peripheral.identifier] = search.commandId
+        pendingConnectByPeripheralId[peripheral.identifier] = search.request
         peripheral.discoverServices([syncServiceUUID])
     }
 
@@ -412,7 +451,7 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
         let psmCharacteristic = CBMutableCharacteristic(
             type: psmCharacteristicUUID, properties: [.read],
             value: nil,
-            permissions: [.readEncryptionRequired])
+            permissions: [.readable])
         let service = CBMutableService(type: syncServiceUUID, primary: true)
         service.characteristics = [psmCharacteristic]
         peripheral.add(service)
@@ -483,16 +522,16 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
         }
         guard
             let index = peerSearches.firstIndex(where: {
-                isSameDeviceName($0.deviceName, advertisedName)
+                isSameDeviceName($0.request.deviceName, advertisedName)
             })
         else {
             askPeripheralItsName(peripheral)
             return
         }
         let search = peerSearches.remove(at: index)
-        peripheralIdentifiersByPairedAddress[search.pairedAddress] = peripheral.identifier
+        peripheralIdentifiersByPairedAddress[search.request.pairedAddress] = peripheral.identifier
         stopScanningWhenNothingIsWanted()
-        beginConnect(commandId: search.commandId, peripheral: peripheral)
+        beginConnect(search.request, peripheral: peripheral)
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -575,26 +614,27 @@ final class BluetoothHelper: NSObject, CBPeripheralManagerDelegate, CBCentralMan
     func peripheral(
         _ peripheral: CBPeripheral, didOpen channel: CBL2CAPChannel?, error: Error?
     ) {
-        guard let commandId = pendingConnectByPeripheralId.removeValue(
+        guard let request = pendingConnectByPeripheralId.removeValue(
             forKey: peripheral.identifier)
         else { return }
         connectingPeripherals.removeValue(forKey: peripheral.identifier)
         guard let channel, error == nil else {
             respondError(
-                id: commandId, message: error?.localizedDescription ?? "L2CAP open failed")
+                id: request.commandId, message: error?.localizedDescription ?? "L2CAP open failed")
             return
         }
         let linkId = registerLink(
             channel, peerDeviceId: peripheral.identifier.uuidString, isIncoming: false)
-        respond(id: commandId, result: ["linkId": linkId])
+        respond(id: request.commandId, result: ["linkId": linkId])
     }
 
     private func failConnect(_ peripheral: CBPeripheral, message: String) {
-        guard let commandId = pendingConnectByPeripheralId.removeValue(
+        guard let request = pendingConnectByPeripheralId.removeValue(
             forKey: peripheral.identifier)
         else { return }
         connectingPeripherals.removeValue(forKey: peripheral.identifier)
-        respondError(id: commandId, message: message)
+        forgetResolvedIdentifier(for: request)
+        retryOrFail(request, message: message)
     }
 }
 

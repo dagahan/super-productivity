@@ -228,7 +228,7 @@ class BluetoothSyncPlugin : Plugin() {
     private fun openL2capChannel(device: BluetoothDevice, psm: Int, call: PluginCall) {
         linkExecutor.execute {
             try {
-                val socket = device.createL2capChannel(psm)
+                val socket = device.createInsecureL2capChannel(psm)
                 socket.connect()
                 val link = registerLink(socket)
                 link.startReading()
@@ -263,7 +263,7 @@ class BluetoothSyncPlugin : Plugin() {
         }
 
         try {
-            val listener = adapter.listenUsingL2capChannel()
+            val listener = adapter.listenUsingInsecureL2capChannel()
             serverSocket = listener
             isListening = true
             psmExchange.publishLocalPsm(listener.psm)

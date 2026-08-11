@@ -210,11 +210,20 @@ export class BluetoothFileResponder {
       );
     }
     const localDeviceId = await this.deps.room.loadLocalDeviceId();
-    const localMembers = await this.deps.room.loadMembers();
-    const peerMember = findMemberByAddress(localMembers, peerAddress);
+    const storedMembers = await this.deps.room.loadMembers();
+    const peerMember =
+      findMemberByAddress(storedMembers, peerAddress) ??
+      storedMembers.find((member) => member.deviceId === request.deviceId);
     if (!peerMember) {
       return failure(request.id, 'notAuthorized', 'Peer is not a member of this room');
     }
+
+    const localMembers = storedMembers.map((member) =>
+      member.deviceId === peerMember.deviceId
+        ? { ...member, platformAddress: peerAddress }
+        : member,
+    );
+    const hasMovedAddress = peerMember.platformAddress !== peerAddress;
 
     const merged = mergeRoomMembers({
       localDeviceId,
@@ -222,7 +231,7 @@ export class BluetoothFileResponder {
       peerDeviceId: peerMember.deviceId,
       peerMembers: request.members,
     });
-    if (merged.addedDeviceIds.length) {
+    if (merged.addedDeviceIds.length || hasMovedAddress) {
       await this.deps.room.saveMembers(merged.members);
     }
 

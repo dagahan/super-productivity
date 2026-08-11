@@ -114,15 +114,8 @@ class ElectronBluetoothBridge implements BluetoothPlatformBridge {
 
   async isPeerBonded(platformAddress: string): Promise<boolean> {
     return (
-      this.hasOpenEncryptedLinkWithPeer(platformAddress) ||
+      isCoreBluetoothIdentifier(platformAddress) ||
       (await this.isListedAsSystemPairedDevice(platformAddress))
-    );
-  }
-
-  private hasOpenEncryptedLinkWithPeer(platformAddress: string): boolean {
-    const wanted = normalizeDeviceAddress(platformAddress);
-    return [...this.linksById.values()].some(
-      (link) => normalizeDeviceAddress(link.peerDeviceId) === wanted,
     );
   }
 
